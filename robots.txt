@@ -1,0 +1,9 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /student/
+Disallow: /api/
+Disallow: /auth/
+Disallow: /config/
+Disallow: /includes/
+Allow: /$
+Allow: /index.php
