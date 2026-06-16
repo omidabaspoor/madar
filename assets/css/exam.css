@@ -1,0 +1,91 @@
+/* =================================================================
+   Exam-taking environment — focused, mobile-first, stable
+   ================================================================= */
+.exam-env { min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; background:var(--bg); }
+
+/* top bar */
+.exam-bar {
+  position:sticky; top:0; z-index:40; display:flex; align-items:center; gap:12px;
+  padding:12px 16px; background:rgba(12,21,18,.92); backdrop-filter:blur(14px); border-bottom:1px solid var(--border);
+}
+.exam-bar-info { flex:1; min-width:0; }
+.eb-title { font-weight:800; font-size:.98rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.eb-sub { font-size:.74rem; color:var(--text-3); }
+.exam-timer { display:flex; align-items:center; gap:6px; padding:7px 13px; border-radius:var(--r-pill); background:var(--surface-2); border:1px solid var(--border); font-weight:800; font-variant-numeric:tabular-nums; font-size:.95rem; }
+.exam-timer.warning { background:rgba(217,178,95,.16); border-color:var(--warn); color:var(--warn); }
+.exam-timer.danger { background:rgba(217,116,116,.16); border-color:var(--danger); color:var(--danger); animation:pulse 1.2s infinite; }
+
+/* main */
+.exam-main { flex:1; display:flex; flex-direction:column; max-width:760px; width:100%; margin:0 auto; padding:18px 16px 0; }
+.exam-questions { flex:1; }
+.exam-q { display:none; animation:fadeUp .3s var(--ease); }
+.exam-q.active { display:block; }
+
+.eq-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+.eq-sec { padding:4px 12px; border-radius:var(--r-pill); background:var(--sage-glass); color:var(--sage-light); font-size:.78rem; font-weight:700; }
+.eq-num { font-size:.8rem; color:var(--text-3); margin-right:auto; }
+.eq-flag { width:36px; height:36px; border-radius:11px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-3); display:grid; place-items:center; cursor:pointer; transition:.2s; }
+.eq-flag.on { background:rgba(217,178,95,.18); border-color:var(--warn); color:var(--warn); }
+
+.eq-image { margin-bottom:14px; text-align:center; }
+.eq-image img { max-width:100%; max-height:320px; border-radius:var(--r-md); border:1px solid var(--border); }
+.eq-text { font-size:1.08rem; font-weight:600; line-height:2; margin-bottom:18px; }
+
+.eq-options { display:flex; flex-direction:column; gap:11px; }
+.eq-opt {
+  display:flex; align-items:center; gap:13px; padding:15px 16px; border-radius:var(--r-md);
+  background:var(--card); border:1.5px solid var(--border-soft); cursor:pointer; transition:.18s var(--ease); text-align:right; width:100%;
+}
+.eq-opt:hover { border-color:var(--border); }
+.eq-opt:active { transform:scale(.99); }
+.eqo-marker { width:34px; height:34px; border-radius:10px; background:var(--surface-3); display:grid; place-items:center; font-weight:800; font-size:.95rem; flex-shrink:0; transition:.18s; }
+.eqo-text { font-size:1rem; line-height:1.7; }
+.eq-opt.selected { border-color:var(--sage); background:var(--sage-glass); }
+.eq-opt.selected .eqo-marker { background:var(--grad-sage); color:#0c1512; }
+.eq-clear { margin-top:14px; background:none; border:none; color:var(--text-3); font-size:.82rem; cursor:pointer; display:inline-flex; gap:5px; align-items:center; }
+.eq-clear:hover { color:var(--danger); }
+
+/* nav */
+.exam-nav { position:sticky; bottom:0; display:flex; gap:10px; align-items:center; padding:14px 0 calc(14px + env(safe-area-inset-bottom)); background:linear-gradient(transparent,var(--bg) 30%); }
+.exam-nav .btn { flex:1; }
+.exam-nav #gridToggle { flex:0 0 auto; }
+
+/* question grid drawer */
+.qgrid-overlay { position:fixed; inset:0; background:rgba(6,11,9,.6); backdrop-filter:blur(4px); z-index:60; opacity:0; visibility:hidden; transition:.3s; }
+.qgrid-overlay.open { opacity:1; visibility:visible; }
+.qgrid-panel {
+  position:fixed; top:0; bottom:0; left:0; width:320px; max-width:88vw; z-index:70; padding:18px;
+  background:linear-gradient(180deg,var(--surface),var(--bg-2)); border-left:1px solid var(--border);
+  transform:translateX(-105%); transition:.3s var(--ease); display:flex; flex-direction:column;
+}
+.qgrid-panel.open { transform:none; box-shadow:var(--sh-lg); }
+.qgrid-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.qgrid-legend { display:flex; gap:14px; flex-wrap:wrap; font-size:.74rem; color:var(--text-3); margin-bottom:14px; }
+.qgrid-legend .lg { display:inline-block; width:12px; height:12px; border-radius:4px; margin-left:4px; vertical-align:middle; }
+.qgrid-legend .lg.answered { background:var(--sage); }
+.qgrid-legend .lg.flagged { background:var(--warn); }
+.qgrid-legend .lg.blank { background:var(--surface-3); }
+.qgrid-scroll { flex:1; overflow-y:auto; }
+.qgrid-sec-title { font-size:.8rem; font-weight:700; color:var(--gold-light); margin:14px 0 8px; }
+.qgrid { display:grid; grid-template-columns:repeat(6,1fr); gap:7px; }
+.qg-cell { aspect-ratio:1; border-radius:9px; background:var(--surface-3); border:1.5px solid transparent; color:var(--text-2); font-weight:700; font-size:.82rem; cursor:pointer; transition:.15s; }
+.qg-cell:hover { border-color:var(--sage); }
+.qg-cell.answered { background:var(--sage-glass); color:var(--sage-light); border-color:var(--sage); }
+.qg-cell.flagged { box-shadow:inset 0 0 0 2px var(--warn); }
+.qg-cell.current { background:var(--grad-gold); color:#1a1206; border-color:var(--gold); }
+
+/* submit summary */
+.submit-summary { display:flex; gap:10px; }
+.submit-summary .ss-item { flex:1; text-align:center; padding:14px 8px; background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--r-md); }
+.submit-summary .v { display:block; font-weight:800; font-size:1.4rem; }
+.submit-summary .k { font-size:.74rem; color:var(--text-3); }
+
+@media (min-width:761px){
+  .qgrid-panel { left:auto; right:0; border-left:none; border-right:1px solid var(--border); transform:translateX(105%); }
+  .qgrid-panel.open { transform:none; }
+}
+@media (max-width:600px){
+  .eq-text { font-size:1.02rem; }
+  .eqo-text { font-size:.95rem; }
+  .qgrid { grid-template-columns:repeat(5,1fr); }
+}
