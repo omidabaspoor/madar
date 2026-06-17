@@ -31,7 +31,10 @@ panel_start('برنامه من', $plan ? (jalali_date($weekStart) . ' تا ' . j
     <a href="?week=<?= $nextWeek ?>" class="btn btn-ghost btn-icon" data-tip="هفته بعد"><?= icon('chevron-left',18) ?></a>
   </div>
   <?php if ($plan): $pp = plan_progress((int)$plan['id']); ?>
-  <span class="badge badge-sage"><?= icon('target',14) ?> <?= fa_num($pp['percent']) ?>٪ تکمیل (<?= fa_num($pp['done']) ?>/<?= fa_num($pp['total']) ?>)</span>
+  <div class="flex gap-2 wrap">
+    <a href="<?= url('student/plan_pdf.php?week='.$weekStart) ?>" target="_blank" class="btn btn-gold btn-sm"><?= icon('paperclip',14) ?> چاپ / ذخیره PDF</a>
+    <span class="badge badge-sage"><?= icon('target',14) ?> <?= fa_num($pp['percent']) ?>٪ تکمیل (<?= fa_num($pp['done']) ?>/<?= fa_num($pp['total']) ?>)</span>
+  </div>
   <?php endif; ?>
 </div>
 

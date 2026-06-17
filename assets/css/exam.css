@@ -35,12 +35,13 @@
 .eq-opt {
   display:flex; align-items:center; gap:13px; padding:15px 16px; border-radius:var(--r-md);
   background:var(--card); border:1.5px solid var(--border-soft); cursor:pointer; transition:.18s var(--ease); text-align:right; width:100%;
+  color:var(--text); font-family:inherit;
 }
 .eq-opt:hover { border-color:var(--border); }
 .eq-opt:active { transform:scale(.99); }
 .eqo-marker { width:34px; height:34px; border-radius:10px; background:var(--surface-3); display:grid; place-items:center; font-weight:800; font-size:.95rem; flex-shrink:0; transition:.18s; }
-.eqo-text { font-size:1rem; line-height:1.7; }
-.eq-opt.selected { border-color:var(--sage); background:var(--sage-glass); }
+.eqo-text { font-size:1rem; line-height:1.7; color:var(--text); }
+.eq-opt.selected { border-color:var(--sage); background:var(--sage-glass); color:var(--text); }
 .eq-opt.selected .eqo-marker { background:var(--grad-sage); color:#0c1512; }
 .eq-clear { margin-top:14px; background:none; border:none; color:var(--text-3); font-size:.82rem; cursor:pointer; display:inline-flex; gap:5px; align-items:center; }
 .eq-clear:hover { color:var(--danger); }

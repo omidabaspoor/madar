@@ -186,3 +186,102 @@
   .type-cards { grid-template-columns:1fr 1fr; }
   .step-actions .btn { width:100%; }
 }
+
+/* ============ Plan Builder UX upgrades ============ */
+.task-pill { cursor:grab; padding-left:34px; }
+.task-pill:active { cursor:grabbing; }
+.task-pill.dragging { opacity:.45; transform:scale(.98); }
+.cell.drop-target { outline:2px dashed var(--gold); outline-offset:-5px; background:rgba(203,172,128,.10) !important; }
+body.copy-mode .cell { cursor:copy; }
+.task-pill.copy-source { border-color:var(--gold); box-shadow:0 0 0 2px rgba(203,172,128,.18), var(--sh-sm); }
+
+.task-pill .tp-copy,
+.task-pill .tp-del {
+  position:absolute; top:5px; width:18px; height:18px; border-radius:6px;
+  background:var(--surface-3); border:none; color:var(--text-3); display:none; place-items:center; z-index:3;
+}
+.task-pill .tp-copy { left:27px; }
+.task-pill .tp-del { left:5px; }
+.task-pill:hover .tp-copy,
+.task-pill:hover .tp-del,
+.task-pill.copy-source .tp-copy { display:grid; }
+.task-pill .tp-copy:hover { background:var(--gold); color:#1a1206; }
+.task-pill .tp-del:hover { background:var(--danger); color:#fff; }
+
+.quick-presets { display:flex; gap:7px; flex-wrap:wrap; margin-top:10px; }
+.quick-presets button {
+  border:1px solid var(--border-soft); background:var(--surface-2); color:var(--text-2);
+  border-radius:var(--r-pill); padding:6px 10px; font-size:.75rem; font-weight:800; transition:.18s var(--ease);
+}
+.quick-presets button:hover { border-color:var(--gold); color:var(--gold-light); background:var(--gold-glass); }
+
+#copyHint { background:var(--gold-glass); border-color:rgba(203,172,128,.32); color:var(--gold-light); }
+
+/* easier touch targets on tablets/mobiles */
+@media (max-width:760px){
+  .plan-grid { min-width:980px; }
+  .cell { min-height:92px; }
+  .task-pill { padding:9px 10px 9px 38px; font-size:.84rem; }
+  .task-pill .tp-copy,
+  .task-pill .tp-del { display:grid; width:22px; height:22px; }
+  .task-pill .tp-copy { left:31px; }
+  .type-grid { grid-template-columns:repeat(2,1fr); }
+  .quick-presets button { flex:1 0 calc(50% - 7px); }
+}
+
+/* cleaner, more futuristic planning cockpit */
+.builder-top {
+  padding:16px; border-radius:var(--r-xl); border:1px solid rgba(107,136,114,.22);
+  background:radial-gradient(circle at 85% 0%, rgba(203,172,128,.12), transparent 32%), linear-gradient(135deg, rgba(107,136,114,.10), rgba(12,21,18,.18));
+  box-shadow:var(--sh-sm);
+}
+.plan-wrap {
+  box-shadow:0 18px 55px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.02);
+  background:linear-gradient(180deg, rgba(22,33,28,.98), rgba(12,21,18,.90));
+}
+.plan-grid thead th { backdrop-filter:blur(12px); }
+.plan-grid .day-cell { box-shadow:-8px 0 24px rgba(0,0,0,.18); }
+.cell { background:rgba(255,255,255,.01); }
+.cell:hover { background:rgba(107,136,114,.08); }
+.cell.special { background:linear-gradient(160deg,rgba(203,172,128,.09),rgba(107,136,114,.03)); }
+.cell.special::before { content:'ویژه'; position:absolute; left:7px; bottom:5px; color:rgba(203,172,128,.32); font-size:.62rem; font-weight:900; pointer-events:none; }
+
+.copy-plan-panel {
+  display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+  padding:14px 16px; margin-bottom:16px; border-radius:var(--r-lg); border:1px solid rgba(203,172,128,.20);
+  background:linear-gradient(135deg, rgba(203,172,128,.09), rgba(107,136,114,.06));
+}
+.copy-plan-panel b { display:flex; align-items:center; gap:7px; }
+.copy-plan-panel .muted { display:block; font-size:.78rem; margin-top:2px; }
+.copy-plan-actions { display:flex; gap:8px; align-items:center; min-width:min(100%, 430px); }
+.copy-plan-actions .select { min-width:250px; height:42px; }
+
+/* type colors for crowded plans */
+.task-pill.type-test { border-right-color:#e0c595; background:linear-gradient(135deg, rgba(203,172,128,.13), var(--surface-2)); }
+.task-pill.type-study { border-right-color:#8aa791; }
+.task-pill.type-review { border-right-color:#6f9bc0; }
+.task-pill.type-reading { border-right-color:#9aa86f; background:linear-gradient(135deg, rgba(154,168,111,.12), var(--surface-2)); }
+.task-pill.type-exam { border-right-color:#d9b25f; background:linear-gradient(135deg, rgba(217,178,95,.14), var(--surface-2)); }
+.task-pill.type-textbook { border-right-color:#b88fc0; background:linear-gradient(135deg, rgba(184,143,192,.12), var(--surface-2)); }
+.task-pill.type-descriptive { border-right-color:#d99f6f; background:linear-gradient(135deg, rgba(217,159,111,.12), var(--surface-2)); }
+.task-pill.type-custom { border-right-color:#7f8d86; }
+.task-pill .tp-type { font-weight:800; }
+
+@media (max-width:760px){
+  .copy-plan-actions { width:100%; flex-direction:column; align-items:stretch; }
+  .copy-plan-actions .select { min-width:0; width:100%; }
+}
+
+/* highlight most-used durations in the native duration select */
+#f_dur.duration-hot {
+  border-color:var(--gold) !important;
+  background:linear-gradient(135deg, rgba(203,172,128,.16), var(--surface-2)) !important;
+  color:var(--gold-light) !important;
+  font-weight:900;
+  box-shadow:0 0 0 3px rgba(203,172,128,.10);
+}
+#f_dur option.hot-duration {
+  color:#1a1206;
+  background:#e0c595;
+  font-weight:900;
+}

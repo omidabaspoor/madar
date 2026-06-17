@@ -10,7 +10,11 @@ function boot_session(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) return;
     session_name(SESSION_NAME);
-    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+        || (strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+        || (strtolower($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') === 'on')
+        || (str_contains(strtolower($_SERVER['HTTP_CF_VISITOR'] ?? ''), 'https'));
     session_set_cookie_params([
         'lifetime' => SESSION_LIFETIME,
         'path'     => '/',
@@ -77,8 +81,13 @@ function login_user(array $user, bool $remember = false): void
         $token = bin2hex(random_bytes(32));
         $st = db()->prepare('UPDATE users SET remember_token = ? WHERE id = ?');
         $st->execute([hash('sha256', $token), $user['id']]);
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+            || (strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+            || (strtolower($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') === 'on')
+            || (str_contains(strtolower($_SERVER['HTTP_CF_VISITOR'] ?? ''), 'https'));
         setcookie('madar_remember', $user['id'] . ':' . $token, [
-            'expires' => time() + 60 * 60 * 24 * 30, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
+            'expires' => time() + 60 * 60 * 24 * 30, 'path' => '/', 'httponly' => true, 'secure' => $secure, 'samesite' => 'Lax',
         ]);
     }
 }

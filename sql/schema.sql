@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   subject_id    INT UNSIGNED DEFAULT NULL,
   title         VARCHAR(160) NOT NULL,           -- مثلا «زیست ف۴»
   description   VARCHAR(255) DEFAULT NULL,
-  task_type     ENUM('test','study','review','exam','reading','custom') NOT NULL DEFAULT 'study',
+  task_type     ENUM('test','study','review','textbook','descriptive','exam','reading','custom') NOT NULL DEFAULT 'study',
   day_index     TINYINT UNSIGNED NOT NULL,       -- 0..6
   unit_index    TINYINT UNSIGNED NOT NULL DEFAULT 1, -- 1..8 (8=ویژه)
   target_count  INT UNSIGNED DEFAULT NULL,       -- مثلا 40 تست
@@ -113,12 +113,17 @@ CREATE TABLE IF NOT EXISTS tasks (
 --  messages : چت دوطرفه دکتر ↔ دانش‌آموز
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS messages (
-  id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  sender_id   INT UNSIGNED NOT NULL,
-  receiver_id INT UNSIGNED NOT NULL,
-  body        TEXT NOT NULL,
-  is_read     TINYINT(1) NOT NULL DEFAULT 0,
-  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  sender_id       INT UNSIGNED NOT NULL,
+  receiver_id     INT UNSIGNED NOT NULL,
+  body            TEXT NOT NULL,
+  attachment_type VARCHAR(20) NOT NULL DEFAULT 'none', -- none | image | audio | pdf | file
+  attachment_path VARCHAR(255) DEFAULT NULL,
+  attachment_name VARCHAR(190) DEFAULT NULL,
+  attachment_mime VARCHAR(80) DEFAULT NULL,
+  attachment_size INT UNSIGNED DEFAULT NULL,
+  is_read         TINYINT(1) NOT NULL DEFAULT 0,
+  created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_msg_pair (sender_id, receiver_id),
   KEY idx_msg_recv (receiver_id, is_read)
