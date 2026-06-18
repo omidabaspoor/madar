@@ -31,6 +31,8 @@
 .st-meta { display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; align-items:center; }
 .st-subj { font-size:.74rem; padding:2px 9px; border-radius:999px; font-weight:700; }
 .st-prog { font-size:.78rem; color:var(--text-3); }
+.st-src { font-size:.74rem; color:var(--text-faint); display:inline-flex; align-items:center; gap:4px; }
+.st-src svg { opacity:.8; }
 .st-feedback { margin-top:10px; padding:9px 12px; border-radius:var(--r-sm); background:var(--gold-glass); border:1px solid rgba(203,172,128,.25); font-size:.82rem; display:flex; gap:8px; }
 .st-feedback .ico { color:var(--gold-light); flex-shrink:0; }
 .st-note-btn { background:var(--surface-2); border:1px dashed var(--border); color:var(--text-2); font-size:.78rem; cursor:pointer; display:inline-flex; gap:5px; align-items:center; margin-top:9px; padding:6px 12px; border-radius:var(--r-pill); transition:.2s; font-weight:600; }

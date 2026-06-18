@@ -132,3 +132,150 @@
   .feat-grid, .tech-grid, .stats-band, .footer-grid { grid-template-columns: 1fr; }
   .stats-band { gap:12px; }
 }
+
+/* ============================================================
+   Pure-CSS device mockups (replace AI images, crisp on mobile)
+   ============================================================ */
+
+/* ---- phone frame ---- */
+.phone {
+  --phone-w: 290px;
+  width: var(--phone-w); aspect-ratio: 290 / 600;
+  border-radius: 42px; padding: 11px;
+  background: linear-gradient(160deg, #20302a, #0c1512);
+  border: 1px solid rgba(255,255,255,.06);
+  box-shadow: 0 40px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
+  position: relative;
+}
+.phone::before { /* notch */
+  content:''; position:absolute; top:14px; left:50%; transform:translateX(-50%);
+  width:120px; height:22px; background:#0c1512; border-radius:0 0 16px 16px; z-index:3;
+}
+.phone-screen {
+  width:100%; height:100%; border-radius: 32px; overflow:hidden;
+  background: radial-gradient(circle at 80% -10%, rgba(107,136,114,.14), transparent 45%), var(--bg);
+  display:flex; flex-direction:column; position:relative;
+}
+
+/* generic mock chrome */
+.mock-top {
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 26px 16px 12px; gap:10px;
+}
+.mock-top .mt-name { font-weight:800; font-size:.82rem; }
+.mock-top .mt-sub { font-size:.6rem; color:var(--text-3); display:block; }
+.mock-ava {
+  width:34px; height:34px; border-radius:11px; flex-shrink:0;
+  background: linear-gradient(150deg, var(--sage), var(--sage-dark));
+  display:grid; place-items:center; color:#0c1512; font-weight:800; font-size:.8rem;
+}
+.mock-body { flex:1; overflow:hidden; padding: 4px 14px 14px; display:flex; flex-direction:column; gap:10px; }
+
+/* progress ring + line */
+.mock-hero-card {
+  background: linear-gradient(150deg, rgba(203,172,128,.14), rgba(107,136,114,.08));
+  border:1px solid var(--border-soft); border-radius:18px; padding:14px;
+  display:flex; align-items:center; gap:14px;
+}
+.mock-ring {
+  width:58px; height:58px; border-radius:50%; flex-shrink:0;
+  background: conic-gradient(var(--gold) 75%, var(--surface-3) 0);
+  display:grid; place-items:center;
+}
+.mock-ring span { width:42px; height:42px; border-radius:50%; background:var(--bg); display:grid; place-items:center; font-weight:800; font-size:.78rem; color:var(--gold-light); }
+.mock-hero-card .mh-t { font-weight:800; font-size:.84rem; }
+.mock-hero-card .mh-d { font-size:.66rem; color:var(--text-3); margin-top:2px; }
+
+/* day label */
+.mock-daylabel { display:flex; align-items:center; gap:8px; color:var(--sage-light); font-size:.72rem; font-weight:700; }
+.mock-daylabel::before, .mock-daylabel::after { content:''; height:1px; flex:1; background:var(--border-soft); }
+
+/* task rows */
+.mock-task {
+  display:flex; align-items:center; gap:10px; padding:10px 11px; border-radius:13px;
+  background:var(--surface-2); border:1px solid var(--border-soft); border-right:3px solid var(--sage);
+}
+.mock-task.t-gold { border-right-color:var(--gold); }
+.mock-task.t-blue { border-right-color:#6f9bc0; }
+.mock-task.done { opacity:.6; }
+.mock-check {
+  width:22px; height:22px; border-radius:7px; flex-shrink:0; display:grid; place-items:center;
+  border:1.5px solid var(--border); color:transparent;
+}
+.mock-check.on { background:var(--success); border-color:var(--success); color:#0c1512; }
+.mock-task .mtk-body { flex:1; min-width:0; }
+.mock-task .mtk-title { font-weight:700; font-size:.74rem; }
+.mock-task .mtk-meta { font-size:.62rem; color:var(--text-3); margin-top:1px; }
+.mock-task.done .mtk-title { text-decoration:line-through; }
+.mtk-pill { font-size:.56rem; font-weight:800; padding:2px 6px; border-radius:6px; background:var(--surface-3); color:var(--text-2); }
+
+/* streak chip */
+.mock-streak {
+  margin-top:auto; display:flex; align-items:center; justify-content:center; gap:8px;
+  padding:11px; border-radius:14px; background:rgba(217,138,69,.1); border:1px solid rgba(217,138,69,.22);
+  color:var(--gold-light); font-weight:800; font-size:.82rem;
+}
+
+/* bottom tabbar */
+.mock-tabs { display:flex; justify-content:space-around; padding:11px 8px 16px; border-top:1px solid var(--border-soft); color:var(--text-faint); }
+.mock-tabs svg { width:19px; height:19px; }
+.mock-tabs .on { color:var(--sage-light); }
+
+/* mini bar chart */
+.mock-chart { display:flex; align-items:flex-end; gap:6px; height:64px; padding:4px 2px 0; }
+.mock-chart i { flex:1; border-radius:5px 5px 0 0; background:linear-gradient(180deg,var(--sage-light),var(--sage-dark)); display:block; }
+.mock-chart i:nth-child(odd){ background:linear-gradient(180deg,var(--gold-light),var(--gold-dark)); }
+
+/* ---- desktop/admin window mockup ---- */
+.win {
+  width:100%; border-radius:18px; overflow:hidden; border:1px solid var(--border);
+  background:var(--surface); box-shadow:var(--sh-lg);
+}
+.win-bar { display:flex; align-items:center; gap:7px; padding:11px 14px; background:var(--surface-2); border-bottom:1px solid var(--border-soft); }
+.win-dot { width:10px; height:10px; border-radius:50%; background:var(--surface-3); }
+.win-dot.r{ background:#d9746e; } .win-dot.y{ background:#d9b25f; } .win-dot.g{ background:#6fae7b; }
+.win-url { margin-right:10px; font-size:.66rem; color:var(--text-3); background:var(--bg); border:1px solid var(--border-soft); border-radius:7px; padding:3px 10px; }
+.win-body { padding:14px; display:grid; grid-template-columns: 64px 1fr; gap:12px; min-height:300px; }
+.win-side { display:flex; flex-direction:column; gap:8px; padding-top:4px; }
+.win-side .ws-logo { width:34px; height:34px; border-radius:11px; background:linear-gradient(150deg,var(--gold-light),var(--gold)); margin:0 auto 6px; }
+.win-side .ws-i { height:30px; border-radius:9px; background:var(--surface-2); border:1px solid var(--border-soft); }
+.win-side .ws-i.on { background:var(--gold-glass); border-color:rgba(203,172,128,.3); }
+.win-main { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.win-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.win-stat { background:var(--card); border:1px solid var(--border-soft); border-radius:13px; padding:12px; }
+.win-stat .v { font-weight:800; font-size:1.1rem; }
+.win-stat .v.gold{ color:var(--gold-light);} .win-stat .v.sage{ color:var(--sage-light);}
+.win-stat .k { font-size:.62rem; color:var(--text-3); margin-top:2px; }
+.win-grid { background:var(--card); border:1px solid var(--border-soft); border-radius:13px; padding:12px; }
+.win-grid .wg-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.win-grid .wg-head b { font-size:.78rem; }
+.win-grid .wg-head .wg-badge { font-size:.6rem; font-weight:800; color:var(--sage-light); background:var(--sage-glass); padding:3px 9px; border-radius:999px; }
+.win-row { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:6px; }
+.win-cell { height:34px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border-soft); display:flex; align-items:center; padding:0 7px; font-size:.56rem; color:var(--text-2); font-weight:700; }
+.win-cell.f-gold { border-right:2px solid var(--gold); }
+.win-cell.f-sage { border-right:2px solid var(--sage); }
+.win-cell.empty { background:transparent; border-style:dashed; }
+
+/* hero stage that holds the phone */
+.hero-stage { position:relative; display:flex; justify-content:center; align-items:center; min-height:420px; }
+.hero-stage .phone { animation: float 6s ease-in-out infinite; }
+.hero-stage .glow { position:absolute; inset:0; z-index:-1; }
+
+/* panels preview: device pair */
+.panels-pair { display:grid; grid-template-columns: 1.5fr 1fr; gap:22px; align-items:center; }
+.panels-pair .win { transform: perspective(1400px) rotateY(4deg); }
+.panels-pair .phone { --phone-w: 240px; margin: 0 auto; }
+
+@media (max-width: 920px){
+  .panels-pair { grid-template-columns: 1fr; gap:28px; }
+  .panels-pair .win { transform:none; max-width:560px; margin:0 auto; }
+}
+@media (max-width: 620px){
+  .phone { --phone-w: min(82vw, 300px); }
+  .hero-stage { min-height: auto; padding: 8px 0; }
+  .win-body { grid-template-columns: 1fr; }
+  .win-side { flex-direction:row; gap:6px; }
+  .win-side .ws-logo { display:none; }
+  .win-side .ws-i { flex:1; height:26px; }
+  .win-row { grid-template-columns: repeat(4,1fr); }
+}

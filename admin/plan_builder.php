@@ -10,6 +10,8 @@ $studentId = (int)($_GET['student'] ?? 0);
 $student = get_user($studentId);
 if (!$student || $student['role'] !== 'student') { flash('error','دانش‌آموز یافت نشد'); redirect('admin/students.php'); }
 
+$plannerCfg = planner_config_js((int)$u['id']);
+
 // هفته (شنبه)
 $weekStart = isset($_GET['week']) ? week_saturday($_GET['week']) : week_saturday();
 $plan = find_or_create_plan($studentId, (int)$u['id'], $weekStart);
@@ -47,7 +49,10 @@ panel_start('برنامه‌ریز هفتگی', '', 'admin', 'plans', ['builder.
 <div class="flex gap-2 wrap mb-4">
   <button class="btn btn-ghost btn-sm" id="copyWeekBtn"><?= icon('copy',15) ?> کپی از هفته قبل</button>
   <button class="btn btn-ghost btn-sm" id="seedSpecialBtn"><?= icon('sparkles',15) ?> واحد ویژه پیش‌فرض</button>
-  <span class="badge" id="copyHint" style="display:none"><?= icon('copy',13) ?> برای کپی، خانه مقصد را بزنید</span>
+  <span class="copy-hint" id="copyHint" style="display:none">
+    <?= icon('copy',14) ?> <span id="copyHintText">برای کپی، خانه مقصد را بزنید</span>
+    <button type="button" id="stopPasteBtn" class="copy-hint-stop" data-tip="پایان کپی (Esc)"><?= icon('close',13) ?></button>
+  </span>
   <span class="badge <?= $plan['status']==='published'?'badge-sage':'badge-gold' ?>" id="statusBadge">
     <?= $plan['status']==='published' ? icon('check-circle',13).' منتشر شده' : icon('edit',13).' پیش‌نویس' ?>
   </span>
@@ -75,13 +80,20 @@ panel_start('برنامه‌ریز هفتگی', '', 'admin', 'plans', ['builder.
 <?php endif; ?>
 
 <!-- grid -->
-<div class="plan-wrap">
+<div class="plan-wrap" data-density="<?= e($plannerCfg['gridDensity']) ?>">
   <table class="plan-grid" id="planGrid" data-plan="<?= (int)$plan['id'] ?>">
     <thead>
       <tr>
         <th class="day-col">روز / واحد</th>
         <?php foreach (UNIT_NAMES as $ui=>$un): ?>
-        <th class="<?= $ui===8?'special':'' ?>"><?= e($un) ?></th>
+        <th class="<?= $ui===8?'special':'' ?>">
+          <div class="unit-head">
+            <span class="unit-name"><?= e($un) ?></span>
+            <button type="button" class="unit-clear" data-clear-unit="<?= $ui ?>" data-tip="حذف این واحد در کل هفته" aria-label="حذف کل واحد">
+              <?= icon('trash',13) ?>
+            </button>
+          </div>
+        </th>
         <?php endforeach; ?>
       </tr>
     </thead>
@@ -115,94 +127,195 @@ panel_start('برنامه‌ریز هفتگی', '', 'admin', 'plans', ['builder.
   <div class="ps-item" style="flex:1;min-width:200px"><div style="flex:1;width:100%"><div class="between" style="font-size:.78rem;margin-bottom:5px"><span class="k">پیشرفت دانش‌آموز</span><span class="v" id="sumPct" style="font-size:.95rem"><?= fa_num($progress['percent']) ?>٪</span></div><div class="progress"><span id="sumBar" style="width:<?= $progress['percent'] ?>%"></span></div></div></div>
 </div>
 
-<!-- ===== task editor modal ===== -->
+<!-- ===== task editor modal (full-screen, no-scroll) ===== -->
 <div class="modal-backdrop" id="taskModal">
-  <div class="modal">
-    <div class="modal-head"><h3 id="taskModalTitle">افزودن تسک</h3><button class="modal-close" data-close><?= icon('close',18) ?></button></div>
-    <form id="taskForm">
+  <div class="modal task-modal-full">
+    <div class="modal-head tm-head">
+      <div class="tm-title">
+        <span class="tm-ico" id="taskHeadIco"><?= icon('plus',20) ?></span>
+        <div>
+          <h3 id="taskModalTitle">افزودن تسک</h3>
+          <span class="tm-sub" id="taskModalSub">درس و نوع را انتخاب کنید؛ بقیه‌ی موارد خودکار پر می‌شوند.</span>
+        </div>
+      </div>
+      <button class="modal-close" data-close><?= icon('close',18) ?></button>
+    </div>
+
+    <form id="taskForm" class="tm-form">
       <input type="hidden" name="id" id="taskId">
       <input type="hidden" name="day_index" id="taskDay">
       <input type="hidden" name="unit_index" id="taskUnit">
       <input type="hidden" name="task_type" id="taskType" value="study">
-      <div class="field">
-        <label>نوع تسک</label>
-        <div class="type-grid" id="typeGrid">
-          <?php foreach (TASK_TYPES as $k=>$tt): ?>
-          <div class="type-opt <?= $k==='study'?'active':'' ?>" data-type="<?= $k ?>">
-            <span class="icon-tile <?= in_array($k,['test','exam'])?'':'sage' ?>"><?= icon($tt['icon'],18) ?></span>
-            <div class="t"><?= e($tt['label']) ?></div>
+
+      <div class="tm-grid">
+        <!-- ستون راست: درس + نوع + پیش‌فرض‌ها -->
+        <section class="tm-col">
+          <div class="field">
+            <label><?= icon('book',15) ?> درس</label>
+            <div class="subj-chips" id="subjChips">
+              <button type="button" class="subj-chip active" data-subject=""><?= icon('close',13) ?> بدون درس</button>
+              <?php foreach ($subjects as $s): ?>
+              <button type="button" class="subj-chip" data-subject="<?= (int)$s['id'] ?>" style="--c:<?= e($s['color'] ?? '#6b8872') ?>">
+                <span class="subj-dot" style="background:<?= e($s['color'] ?? '#6b8872') ?>"></span><?= e($s['name']) ?>
+              </button>
+              <?php endforeach; ?>
+            </div>
+            <select class="select" id="f_subject" name="subject_id" hidden>
+              <option value="">— بدون درس —</option>
+              <?php foreach ($subjects as $s): ?>
+              <option value="<?= (int)$s['id'] ?>"><?= e($s['name']) ?></option>
+              <?php endforeach; ?>
+            </select>
           </div>
-          <?php endforeach; ?>
-        </div>
-        <div class="quick-presets" id="quickPresets">
-          <button type="button" data-preset="test20">۲۰ تست</button>
-          <button type="button" data-preset="test40">۴۰ تست</button>
-          <button type="button" data-preset="test60">۶۰ تست</button>
-          <button type="button" data-preset="study60">مطالعه ۶۰د</button>
-          <button type="button" data-preset="study90">مطالعه ۹۰د</button>
-          <button type="button" data-preset="review45">مرور ۴۵د</button>
-          <button type="button" data-preset="textbook">کتاب درسی</button>
-          <button type="button" data-preset="desc">تشریحی</button>
-          <button type="button" data-preset="reading">روزخوانی ۱س</button>
-          <button type="button" data-preset="exam">آزمونک ۵۰د</button>
-        </div>
+
+          <div class="field">
+            <label><?= icon('tasks',15) ?> نوع تسک</label>
+            <div class="type-grid" id="typeGrid">
+              <?php foreach (TASK_TYPES as $k=>$tt): ?>
+              <div class="type-opt <?= $k==='study'?'active':'' ?>" data-type="<?= $k ?>">
+                <span class="icon-tile <?= in_array($k,['test','exam'])?'':'sage' ?>"><?= icon($tt['icon'],18) ?></span>
+                <div class="t"><?= e($tt['label']) ?></div>
+              </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+
+          <div class="field">
+            <label><?= icon('zap',15) ?> تسک‌های آماده <span class="muted">(یک‌کلیک، خودکار پر می‌شود)</span></label>
+            <div class="quick-presets" id="quickPresets">
+              <button type="button" data-preset="study_test30"><?= icon('book',12) ?> درسنامه + ۳۰ تست</button>
+              <button type="button" data-preset="study_test35"><?= icon('book',12) ?> درسنامه + ۳۵ تست</button>
+              <button type="button" data-preset="study_test40"><?= icon('book',12) ?> درسنامه + ۴۰ تست</button>
+              <button type="button" data-preset="class_video"><?= icon('play',12) ?> مطابق کلاس/ویدیو</button>
+              <button type="button" data-preset="test_bank"><?= icon('list',12) ?> بانک تست</button>
+              <button type="button" data-preset="analysis"><?= icon('chart',12) ?> تحلیل آزمون</button>
+              <button type="button" data-preset="mock"><?= icon('clipboard',12) ?> آزمون</button>
+              <button type="button" data-preset="test20"><?= icon('check',12) ?> ۲۰ تست</button>
+              <button type="button" data-preset="test30"><?= icon('check',12) ?> ۳۰ تست</button>
+              <button type="button" data-preset="test40"><?= icon('check',12) ?> ۴۰ تست</button>
+              <button type="button" data-preset="test50"><?= icon('check',12) ?> ۵۰ تست</button>
+              <button type="button" data-preset="study60"><?= icon('book',12) ?> مطالعه ۶۰د</button>
+              <button type="button" data-preset="study90"><?= icon('book',12) ?> مطالعه ۹۰د</button>
+              <button type="button" data-preset="textbook"><?= icon('book',12) ?> کتاب درسی</button>
+              <button type="button" data-preset="errorbook"><?= icon('repeat',12) ?> غلط‌نامه</button>
+              <button type="button" data-preset="review45"><?= icon('repeat',12) ?> مرور ۴۵د</button>
+              <button type="button" data-preset="review15"><?= icon('repeat',12) ?> مرور ویژه ۱۵د</button>
+              <button type="button" data-preset="desc"><?= icon('edit',12) ?> تشریحی</button>
+              <button type="button" data-preset="reading"><?= icon('glasses',12) ?> روزخوانی ۱س</button>
+              <button type="button" data-preset="exam"><?= icon('clipboard',12) ?> آزمونک ۵۰د</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ستون چپ: جزئیات (خودکار پر شده، قابل ویرایش) -->
+        <section class="tm-col">
+          <div class="field">
+            <label for="f_title"><?= icon('book',15) ?> عنوان تسک <span class="muted">(درس + فصل)</span></label>
+            <input class="input" id="f_title" name="title" placeholder="با انتخاب درس خودکار پر می‌شود — مثلاً «زیست ف۴»">
+            <div class="chap-quick" id="chapQuick" hidden>
+              <span class="muted">فصل سریع:</span>
+              <button type="button" data-chap="ف۱">ف۱</button>
+              <button type="button" data-chap="ف۲">ف۲</button>
+              <button type="button" data-chap="ف۳">ف۳</button>
+              <button type="button" data-chap="ف۴">ف۴</button>
+              <button type="button" data-chap="ف۵">ف۵</button>
+              <button type="button" data-chap="ف۶">ف۶</button>
+              <button type="button" data-chap="ف۷">ف۷</button>
+            </div>
+          </div>
+
+          <div class="grid gap-3" style="grid-template-columns:1.3fr 1fr">
+            <div class="field">
+              <label for="f_target"><?= icon('target',15) ?> مقدار هدف</label>
+              <input class="input" id="f_target" name="target_count" type="number" min="0" inputmode="numeric" placeholder="مثلاً ۴۰">
+            </div>
+            <div class="field">
+              <label for="f_unit"><?= icon('list',15) ?> واحد</label>
+              <select class="select" id="f_unit" name="target_unit">
+                <?php foreach (['تست','سوال','صفحه','درسنامه','دقیقه','ساعت','فصل','مبحث'] as $tu): ?>
+                <option><?= e($tu) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid gap-3" style="grid-template-columns:1fr 1fr">
+            <div class="field">
+              <label for="f_dur"><?= icon('clock',15) ?> مدت</label>
+              <select class="select" id="f_dur" name="duration_min">
+                <option value="">اختیاری</option>
+                <?php foreach ([15=>'۱۵ دقیقه',30=>'۳۰ دقیقه',45=>'۴۵ دقیقه',50=>'۵۰ دقیقه',60=>'۶۰ دقیقه / ۱ ساعت',75=>'۷۵ دقیقه',90=>'۹۰ دقیقه',120=>'۱۲۰ دقیقه / ۲ ساعت',150=>'۱۵۰ دقیقه',180=>'۱۸۰ دقیقه / ۳ ساعت'] as $dm=>$dl): ?>
+                <option value="<?= $dm ?>"><?= e($dl) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="field">
+              <label for="f_prio"><?= icon('flag',15) ?> اولویت <span class="muted">(اختیاری)</span></label>
+              <select class="select" id="f_prio" name="priority">
+                <option value="">بدون اولویت</option>
+                <option value="normal">عادی</option>
+                <option value="high">مهم</option>
+                <option value="low">کم‌اهمیت</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="f_source"><?= icon('book',15) ?> منبع <span class="muted">(اختیاری — آزاد بنویسید)</span></label>
+            <input class="input" id="f_source" name="source" list="srcSuggest" placeholder="مثلاً کتاب درسی، آزمون ماز، جزوه کلاس…">
+            <datalist id="srcSuggest">
+              <option value="کتاب درسی"></option>
+              <option value="آزمون ماز"></option>
+              <option value="آزمون قلم‌چی"></option>
+              <option value="آزمون گزینه دو"></option>
+              <option value="جزوه کلاس"></option>
+              <option value="ویدیو/فیلم آموزشی"></option>
+              <option value="کتاب تست"></option>
+              <option value="بانک تست"></option>
+            </datalist>
+          </div>
+
+          <div class="field" style="margin-bottom:0">
+            <label for="f_desc"><?= icon('note',15) ?> توضیحات <span class="muted">(اختیاری)</span></label>
+            <textarea class="input" id="f_desc" name="description" rows="2" placeholder="توضیح کوتاه برای دانش‌آموز…"></textarea>
+          </div>
+
+          <!-- پیش‌نمایش زنده‌ی تسک -->
+          <div class="tm-preview" id="taskPreview">
+            <span class="muted" style="font-size:.74rem"><?= icon('eye',13) ?> پیش‌نمایش:</span>
+            <div class="task-pill" id="previewPill" style="cursor:default">
+              <span class="tp-title" id="pvTitle">تسک</span>
+              <span class="tp-meta" id="pvMeta"></span>
+              <span class="tp-type" id="pvType">مطالعه</span>
+            </div>
+          </div>
+        </section>
       </div>
-      <div class="field">
-        <label for="f_title">عنوان تسک <span class="muted">(اختیاری)</span></label>
-        <input class="input" id="f_title" name="title" placeholder="اگر خالی بماند، خودکار بر اساس نوع/درس پر می‌شود">
-      </div>
-      <div class="field">
-        <label for="f_subject">درس (اختیاری)</label>
-        <select class="select" id="f_subject" name="subject_id">
-          <option value="">— بدون درس —</option>
-          <?php foreach ($subjects as $s): ?>
-          <option value="<?= (int)$s['id'] ?>"><?= e($s['name']) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="grid gap-3" style="grid-template-columns:1.4fr 1fr">
-        <div class="field">
-          <label for="f_target">مقدار هدف</label>
-          <input class="input" id="f_target" name="target_count" type="number" min="0" inputmode="numeric" placeholder="مثلاً ۴۰">
-        </div>
-        <div class="field">
-          <label for="f_unit">واحد</label>
-          <select class="select" id="f_unit" name="target_unit">
-            <?php foreach (['تست','سوال','صفحه','درسنامه','دقیقه','ساعت','فصل','مبحث'] as $tu): ?>
-            <option><?= e($tu) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-      </div>
-      <div class="grid gap-3" style="grid-template-columns:1fr 1fr">
-        <div class="field">
-          <label for="f_dur">مدت</label>
-          <select class="select" id="f_dur" name="duration_min">
-            <option value="">اختیاری</option>
-            <?php foreach ([30=>'۳۰ دقیقه',45=>'⭐ ۴۵ دقیقه',50=>'۵۰ دقیقه',60=>'⭐ ۶۰ دقیقه / ۱ ساعت',75=>'۷۵ دقیقه',90=>'⭐ ۹۰ دقیقه',120=>'۱۲۰ دقیقه / ۲ ساعت',150=>'۱۵۰ دقیقه',180=>'۱۸۰ دقیقه / ۳ ساعت'] as $dm=>$dl): ?>
-            <option value="<?= $dm ?>" <?= in_array($dm,[45,60,90],true)?'class="hot-duration" data-hot="1"':'' ?>><?= e($dl) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="field">
-          <label for="f_prio">اولویت</label>
-          <select class="select" id="f_prio" name="priority">
-            <option value="normal">عادی</option>
-            <option value="high">مهم</option>
-            <option value="low">کم‌اهمیت</option>
-          </select>
-        </div>
-      </div>
-      <div class="field">
-        <label for="f_desc">توضیحات (اختیاری)</label>
-        <textarea class="input" id="f_desc" name="description" rows="2" placeholder="توضیح کوتاه…"></textarea>
-      </div>
-      <div class="flex gap-3 mt-2">
-        <button type="submit" class="btn btn-gold" style="flex:1"><?= icon('check',16) ?> ذخیره تسک</button>
-        <button type="button" class="btn btn-ghost" id="deleteTaskBtn" style="display:none;color:var(--danger)"><?= icon('trash',16) ?></button>
+
+      <div class="tm-footer">
+        <button type="button" class="btn btn-ghost" id="deleteTaskBtn" style="display:none;color:var(--danger)"><?= icon('trash',16) ?> حذف</button>
+        <span class="tm-hint"><?= icon('info',13) ?> با <b>Ctrl+Enter</b> سریع ذخیره کنید</span>
+        <button type="submit" class="btn btn-gold btn-lg" style="min-width:170px"><?= icon('check',16) ?> ذخیره تسک</button>
       </div>
     </form>
   </div>
+</div>
+
+<!-- ===== right-click context menu ===== -->
+<div class="ctx-menu" id="ctxMenu" role="menu" hidden>
+  <button type="button" class="ctx-item" data-act="edit"><?= icon('edit',15) ?> ویرایش تسک</button>
+  <button type="button" class="ctx-item" data-act="copy"><?= icon('copy',15) ?> کپی تسک</button>
+  <button type="button" class="ctx-item" data-act="duplicate"><?= icon('plus',15) ?> تکثیر در همین خانه</button>
+  <button type="button" class="ctx-item" data-act="done"><?= icon('check-circle',15) ?> تغییر وضعیت انجام</button>
+  <div class="ctx-sep"></div>
+  <button type="button" class="ctx-item danger" data-act="delete"><?= icon('trash',15) ?> حذف تسک</button>
+</div>
+<!-- ===== right-click menu for empty cell ===== -->
+<div class="ctx-menu" id="ctxCell" role="menu" hidden>
+  <button type="button" class="ctx-item" data-act="add"><?= icon('plus',15) ?> افزودن تسک</button>
+  <button type="button" class="ctx-item" data-act="paste"><?= icon('copy',15) ?> پیست تسک کپی‌شده</button>
+  <div class="ctx-sep"></div>
+  <button type="button" class="ctx-item danger" data-act="clear_cell"><?= icon('trash',15) ?> خالی‌کردن این خانه</button>
 </div>
 
 <script>
@@ -210,6 +323,11 @@ panel_start('برنامه‌ریز هفتگی', '', 'admin', 'plans', ['builder.
   window.NOTIF_URL = '<?= url('api/notifications.php') ?>';
   window.NOTIF_READ_URL = '<?= url('api/notifications.php?read=1') ?>';
   window.TASK_TYPES = <?= json_encode(array_map(fn($k)=>['label'=>TASK_TYPES[$k]['label']], array_combine(array_keys(TASK_TYPES),array_keys(TASK_TYPES))), JSON_UNESCAPED_UNICODE) ?>;
+  window.PLANNER_CFG = <?= json_encode($plannerCfg, JSON_UNESCAPED_UNICODE) ?>;
+  window.SUBJECTS = <?= json_encode(array_map(fn($s)=>[
+      'id'=>(int)$s['id'],'name'=>$s['name'],'color'=>$s['color'] ?? '#6b8872',
+      'testDefault'=>subject_test_default($s['name'])
+  ], $subjects), JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <?php
 panel_end(['builder.js']);
@@ -225,14 +343,30 @@ function ensure_special_defaults_for_empty_plan(int $planId): void {
     $cnt = db()->prepare('SELECT COUNT(*) FROM tasks WHERE plan_id=?');
     $cnt->execute([$planId]);
     if ((int)$cnt->fetchColumn() > 0) return;
+    $cfg = advisor_settings((int)($plan['advisor_id'] ?? 0));
+    $rMin = (int)$cfg['special_reading_min']; $eMin = (int)$cfg['special_exam_min'];
     $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,title,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
     for ($day=0; $day<7; $day++) {
-        $ins->execute([$planId,$plan['student_id'],'روزخوانی','reading',$day,8,1,'ساعت',60,'normal',1]);
-        $ins->execute([$planId,$plan['student_id'],'آزمونک','exam',$day,8,50,'دقیقه',50,'normal',2]);
+        $ins->execute([$planId,$plan['student_id'],'روزخوانی','reading',$day,8,1,'ساعت',$rMin,'normal',1]);
+        $ins->execute([$planId,$plan['student_id'],'آزمونک','exam',$day,8,50,'دقیقه',$eMin,'normal',2]);
     }
     $note = trim((string)($plan['note'] ?? ''));
     $note = $note ? ($note . "\n" . $marker) : $marker;
     db()->prepare('UPDATE plans SET note=? WHERE id=?')->execute([$note,$planId]);
+}
+
+/* ---- تعداد تستِ پیش‌فرضِ هر درس (برگرفته از الگوی برنامه‌ی واقعی) ---- */
+function subject_test_default(string $name): int {
+    $n = trim($name);
+    // زیست‌شناسی → ۴۰ تست
+    if (strpos($n, 'زیست') !== false) return 40;
+    // ریاضی/حسابان/هندسه/گسسته → ۳۵ تست
+    foreach (['ریاضی','حسابان','هندسه','گسسته'] as $k) if (strpos($n, $k) !== false) return 35;
+    // شیمی و فیزیک → ۳۰ تست
+    foreach (['شیمی','فیزیک'] as $k) if (strpos($n, $k) !== false) return 30;
+    // عمومی‌ها → ۲۰ تست
+    foreach (['ادبیات','عربی','دینی','زبان','هویت','سلامت'] as $k) if (strpos($n, $k) !== false) return 20;
+    return 30;
 }
 
 /* ---- helper: pill markup (server-side, mirrors JS) ---- */
@@ -242,19 +376,24 @@ function builder_task_pill(array $t): string {
     if ($t['target_count']!==null) $meta[] = fa_num($t['target_count']).' '.e($t['target_unit']);
     if ($t['duration_min']) $meta[] = fa_num($t['duration_min']).' دقیقه';
     $metaStr = implode(' · ', $meta);
+    $src = trim((string)($t['source'] ?? ''));
     $type = TASK_TYPES[$t['task_type']]['label'] ?? $t['task_type'];
     return '<div class="task-pill type-'.e($t['task_type']).' '.$done.'" draggable="true" data-id="'.(int)$t['id'].'"'
         .' data-json="'.e(json_encode([
-            'id'=>(int)$t['id'],'title'=>$t['title'],'description'=>$t['description'],'task_type'=>$t['task_type'],
+            'id'=>(int)$t['id'],'title'=>$t['title'],'description'=>$t['description'],'source'=>$src,'task_type'=>$t['task_type'],
             'day_index'=>(int)$t['day_index'],'unit_index'=>(int)$t['unit_index'],
             'target_count'=>$t['target_count']!==null?(int)$t['target_count']:'','target_unit'=>$t['target_unit'],
             'duration_min'=>$t['duration_min']!==null?(int)$t['duration_min']:'','priority'=>$t['priority'],
             'subject_id'=>$t['subject_id']!==null?(int)$t['subject_id']:'',
+            'is_done'=>(int)$t['is_done'],
         ], JSON_UNESCAPED_UNICODE)).'">'
-        .'<button class="tp-copy" data-copy title="کپی">'.icon('copy',12).'</button>'
-        .'<button class="tp-del" data-del>'.icon('close',12).'</button>'
+        .'<div class="tp-actions">'
+        .'<button class="tp-copy" data-copy title="کپی این تسک">'.icon('copy',13).'</button>'
+        .'<button class="tp-del" data-del title="حذف">'.icon('close',13).'</button>'
+        .'</div>'
         .'<span class="tp-title">'.e($t['title']).'</span>'
         .($metaStr?'<span class="tp-meta">'.$metaStr.'</span>':'')
+        .($src?'<span class="tp-src">'.icon('book',11).' '.e($src).'</span>':'')
         .'<span class="tp-type">'.e($type).'</span>'
         .'</div>';
 }

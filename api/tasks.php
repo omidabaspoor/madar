@@ -9,6 +9,9 @@ boot_session();
 require_login();
 require_csrf();
 
+/** نوع‌هایی که در ENUM پایه‌ی قدیمی نبوده‌اند و نیاز به مهاجرت دارند */
+const EXTENDED_TASK_TYPES = ['textbook','descriptive','analysis','special','mock'];
+
 $u = current_user();
 $me = (int)$u['id'];
 $role = $u['role'];
@@ -43,17 +46,22 @@ function default_task_title(string $type, ?int $subjectId = null): string {
                 'review' => $name . ' مرور',
                 'textbook' => $name . ' کتاب درسی',
                 'descriptive' => $name . ' سوال تشریحی',
+                'analysis' => $name . ' تحلیل آزمون',
+                'mock' => $name . ' آزمون',
+                'special' => $name,
                 default => $name,
             };
         }
     }
     return TASK_TYPES[$type]['label'] ?? 'تسک';
 }
-function seed_special_tasks(int $planId): int {
+function seed_special_tasks(int $planId, int $readingMin = 60, int $examMin = 50): int {
     $st = db()->prepare('SELECT * FROM plans WHERE id=? LIMIT 1');
     $st->execute([$planId]);
     $plan = $st->fetch();
     if (!$plan) return 0;
+    $readingMin = max(0, min(600, $readingMin));
+    $examMin    = max(0, min(600, $examMin));
     $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,title,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
     $added = 0;
     for ($day=0; $day<7; $day++) {
@@ -67,8 +75,8 @@ function seed_special_tasks(int $planId): int {
         $sortq = db()->prepare('SELECT COALESCE(MAX(sort_order),0)+1 FROM tasks WHERE plan_id=? AND day_index=? AND unit_index=8');
         $sortq->execute([$planId,$day]);
         $sort = (int)$sortq->fetchColumn();
-        if (!$hasReading) { $ins->execute([$planId,$plan['student_id'],'روزخوانی','reading',$day,8,1,'ساعت',60,'normal',$sort++]); $added++; }
-        if (!$hasExam) { $ins->execute([$planId,$plan['student_id'],'آزمونک','exam',$day,8,50,'دقیقه',50,'normal',$sort++]); $added++; }
+        if (!$hasReading) { $ins->execute([$planId,$plan['student_id'],'روزخوانی','reading',$day,8,1,'ساعت',$readingMin,'normal',$sort++]); $added++; }
+        if (!$hasExam)    { $ins->execute([$planId,$plan['student_id'],'آزمونک','exam',$day,8,50,'دقیقه',$examMin,'normal',$sort++]); $added++; }
     }
     return $added;
 }
@@ -80,11 +88,28 @@ function ensure_extended_task_types(): bool {
         $st = db()->query("SHOW COLUMNS FROM tasks LIKE 'task_type'");
         $col = $st->fetch();
         $type = (string)($col['Type'] ?? '');
-        if (str_contains($type, "'textbook'") && str_contains($type, "'descriptive'")) return $checked = true;
-        db()->exec("ALTER TABLE tasks MODIFY task_type ENUM('test','study','review','textbook','descriptive','exam','reading','custom') NOT NULL DEFAULT 'study'");
+        $hasAll = str_contains($type, "'textbook'") && str_contains($type, "'descriptive'")
+               && str_contains($type, "'analysis'") && str_contains($type, "'special'") && str_contains($type, "'mock'");
+        if (!$hasAll) {
+            db()->exec("ALTER TABLE tasks MODIFY task_type ENUM('test','study','review','textbook','descriptive','exam','reading','custom','analysis','special','mock') NOT NULL DEFAULT 'study'");
+        }
         return $checked = true;
     } catch (Throwable $e) {
         return $checked = false;
+    }
+}
+
+/** اطمینان از وجود ستون «منبع» (source) */
+function ensure_source_column(): bool {
+    static $ok = null;
+    if ($ok !== null) return $ok;
+    try {
+        $st = db()->query("SHOW COLUMNS FROM tasks LIKE 'source'");
+        if ($st->fetch()) return $ok = true;
+        db()->exec("ALTER TABLE tasks ADD COLUMN source VARCHAR(120) DEFAULT NULL AFTER description");
+        return $ok = true;
+    } catch (Throwable $e) {
+        return $ok = false;
     }
 }
 
@@ -102,7 +127,8 @@ case 'create': {
     $day  = clamp_int($in['day_index'] ?? 0, 0, 6);
     $unit = clamp_int($in['unit_index'] ?? 1, 1, 8);
     $type = in_array($in['task_type'] ?? '', array_keys(TASK_TYPES), true) ? $in['task_type'] : 'study';
-    if (in_array($type, ['textbook','descriptive'], true) && !ensure_extended_task_types()) json_out(['ok'=>false,'error'=>'برای نوع‌های جدید، فایل sql/upgrade_task_types.sql را یک‌بار اجرا کنید.'],500);
+    if (in_array($type, EXTENDED_TASK_TYPES, true) && !ensure_extended_task_types()) json_out(['ok'=>false,'error'=>'برای نوع‌های جدید، فایل sql/upgrade_task_types2.sql را یک‌بار اجرا کنید (یا install.php را باز کنید).'],500);
+    $hasSource = ensure_source_column();
     $target = isset($in['target_count']) && $in['target_count']!=='' ? max(0,(int)$in['target_count']) : null;
     $tunit  = trim((string)($in['target_unit'] ?? 'تست')) ?: 'تست';
     $dur    = isset($in['duration_min']) && $in['duration_min']!=='' ? max(0,(int)$in['duration_min']) : null;
@@ -110,14 +136,25 @@ case 'create': {
     $title = trim((string)($in['title'] ?? ''));
     if ($title === '') $title = default_task_title($type, $subj);
     $desc   = trim((string)($in['description'] ?? '')) ?: null;
+    $source = trim((string)($in['source'] ?? '')) ?: null;
     $prio   = in_array($in['priority'] ?? '', ['low','normal','high'], true) ? $in['priority'] : 'normal';
 
     $sortq = db()->prepare('SELECT COALESCE(MAX(sort_order),0)+1 FROM tasks WHERE plan_id=? AND day_index=? AND unit_index=?');
     $sortq->execute([$planId,$day,$unit]); $sort=(int)$sortq->fetchColumn();
 
-    $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,subject_id,title,description,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $ins->execute([$planId,$studentId,$subj,$title,$desc,$type,$day,$unit,$target,$tunit,$dur,$prio,$sort]);
+    if ($hasSource) {
+        $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,subject_id,title,description,source,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        $ins->execute([$planId,$studentId,$subj,$title,$desc,$source,$type,$day,$unit,$target,$tunit,$dur,$prio,$sort]);
+    } else {
+        $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,subject_id,title,description,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        $ins->execute([$planId,$studentId,$subj,$title,$desc,$type,$day,$unit,$target,$tunit,$dur,$prio,$sort]);
+    }
     $id = (int)db()->lastInsertId();
+    // یادگیری انتخاب برای پرکردن خودکار هوشمند (فقط برای ساخت دستی، نه کپی)
+    if (empty($in['_no_learn'])) {
+        remember_task_choice($me, ['task_type'=>$type,'unit_index'=>$unit,'subject_id'=>$subj,
+            'target_count'=>$target,'target_unit'=>$tunit,'duration_min'=>$dur,'priority'=>$prio,'source'=>$source]);
+    }
     json_out(['ok'=>true,'task'=>render_task(task_row($id))]);
 }
 
@@ -127,7 +164,8 @@ case 'update': {
     $id = (int)($in['id'] ?? 0); $t = task_row($id);
     if (!$t || !plan_owned_by_advisor((int)$t['plan_id'],$me,$role)) json_out(['ok'=>false,'error'=>'تسک یافت نشد'],404);
     $type = in_array($in['task_type'] ?? '', array_keys(TASK_TYPES), true) ? $in['task_type'] : $t['task_type'];
-    if (in_array($type, ['textbook','descriptive'], true) && !ensure_extended_task_types()) json_out(['ok'=>false,'error'=>'برای نوع‌های جدید، فایل sql/upgrade_task_types.sql را یک‌بار اجرا کنید.'],500);
+    if (in_array($type, EXTENDED_TASK_TYPES, true) && !ensure_extended_task_types()) json_out(['ok'=>false,'error'=>'برای نوع‌های جدید، فایل sql/upgrade_task_types2.sql را یک‌بار اجرا کنید (یا install.php را باز کنید).'],500);
+    $hasSource = ensure_source_column();
     $target = ($in['target_count'] ?? '')!=='' ? max(0,(int)$in['target_count']) : null;
     $tunit  = trim((string)($in['target_unit'] ?? $t['target_unit'])) ?: 'تست';
     $dur    = ($in['duration_min'] ?? '')!=='' ? max(0,(int)$in['duration_min']) : null;
@@ -135,9 +173,19 @@ case 'update': {
     $title = trim((string)($in['title'] ?? $t['title']));
     if ($title === '') $title = default_task_title($type, $subj);
     $desc   = trim((string)($in['description'] ?? '')) ?: null;
+    $source = isset($in['source']) ? (trim((string)$in['source']) ?: null) : ($t['source'] ?? null);
     $prio   = in_array($in['priority'] ?? '', ['low','normal','high'], true) ? $in['priority'] : $t['priority'];
-    $up = db()->prepare('UPDATE tasks SET title=?,description=?,task_type=?,target_count=?,target_unit=?,duration_min=?,subject_id=?,priority=? WHERE id=?');
-    $up->execute([$title,$desc,$type,$target,$tunit,$dur,$subj,$prio,$id]);
+    if ($hasSource) {
+        $up = db()->prepare('UPDATE tasks SET title=?,description=?,source=?,task_type=?,target_count=?,target_unit=?,duration_min=?,subject_id=?,priority=? WHERE id=?');
+        $up->execute([$title,$desc,$source,$type,$target,$tunit,$dur,$subj,$prio,$id]);
+    } else {
+        $up = db()->prepare('UPDATE tasks SET title=?,description=?,task_type=?,target_count=?,target_unit=?,duration_min=?,subject_id=?,priority=? WHERE id=?');
+        $up->execute([$title,$desc,$type,$target,$tunit,$dur,$subj,$prio,$id]);
+    }
+    if (empty($in['_no_learn'])) {
+        remember_task_choice($me, ['task_type'=>$type,'unit_index'=>(int)$t['unit_index'],'subject_id'=>$subj,
+            'target_count'=>$target,'target_unit'=>$tunit,'duration_min'=>$dur,'priority'=>$prio,'source'=>$source]);
+    }
     json_out(['ok'=>true,'task'=>render_task(task_row($id))]);
 }
 
@@ -157,6 +205,24 @@ case 'clear_day': {
     if (!plan_owned_by_advisor($planId,$me,$role)) json_out(['ok'=>false,'error'=>'برنامه نامعتبر'],403);
     db()->prepare('DELETE FROM tasks WHERE plan_id=? AND day_index=?')->execute([$planId,$day]);
     json_out(['ok'=>true]);
+}
+
+/* ============ پاک‌کردن یک واحد در کل هفته ============ */
+case 'clear_unit': {
+    if (!in_array($role, ['advisor','admin'], true)) json_out(['ok'=>false,'error'=>'دسترسی ندارید'],403);
+    $planId=(int)($in['plan_id']??0); $unit=clamp_int($in['unit_index']??1,1,8);
+    if (!plan_owned_by_advisor($planId,$me,$role)) json_out(['ok'=>false,'error'=>'برنامه نامعتبر'],403);
+    $del = db()->prepare('DELETE FROM tasks WHERE plan_id=? AND unit_index=?');
+    $del->execute([$planId,$unit]);
+    json_out(['ok'=>true,'removed'=>$del->rowCount()]);
+}
+
+/* ============ پیشنهاد هوشمند برای پرکردن خودکار خانه ============ */
+case 'suggest': {
+    if (!in_array($role, ['advisor','admin'], true)) json_out(['ok'=>false,'error'=>'دسترسی ندارید'],403);
+    $unit = isset($in['unit_index']) && $in['unit_index']!=='' ? (int)$in['unit_index'] : null;
+    $subj = isset($in['subject_id']) && $in['subject_id']!=='' ? (int)$in['subject_id'] : null;
+    json_out(['ok'=>true,'suggestion'=>suggest_task_defaults($me, $unit, $subj)]);
 }
 
 /* ============ انتشار / پیش‌نویس برنامه ============ */
@@ -184,8 +250,14 @@ case 'copy_week': {
     if (!$prevId) json_out(['ok'=>false,'error'=>'برنامه‌ی هفته‌ی قبل یافت نشد'],404);
     db()->prepare('DELETE FROM tasks WHERE plan_id=?')->execute([$planId]);
     $rows = plan_tasks($prevId); $n=0;
-    $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,subject_id,title,description,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    foreach ($rows as $r) { $ins->execute([$planId,$plan['student_id'],$r['subject_id'],$r['title'],$r['description'],$r['task_type'],$r['day_index'],$r['unit_index'],$r['target_count'],$r['target_unit'],$r['duration_min'],$r['priority'],$r['sort_order']]); $n++; }
+    $hasSource = ensure_source_column();
+    if ($hasSource) {
+        $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,subject_id,title,description,source,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        foreach ($rows as $r) { $ins->execute([$planId,$plan['student_id'],$r['subject_id'],$r['title'],$r['description'],$r['source']??null,$r['task_type'],$r['day_index'],$r['unit_index'],$r['target_count'],$r['target_unit'],$r['duration_min'],$r['priority'],$r['sort_order']]); $n++; }
+    } else {
+        $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,subject_id,title,description,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        foreach ($rows as $r) { $ins->execute([$planId,$plan['student_id'],$r['subject_id'],$r['title'],$r['description'],$r['task_type'],$r['day_index'],$r['unit_index'],$r['target_count'],$r['target_unit'],$r['duration_min'],$r['priority'],$r['sort_order']]); $n++; }
+    }
     json_out(['ok'=>true,'copied'=>$n]);
 }
 
@@ -204,10 +276,19 @@ case 'copy_to_student': {
     try {
         db()->prepare('DELETE FROM tasks WHERE plan_id=?')->execute([$targetPlan['id']]);
         $rows = plan_tasks($planId); $n=0;
-        $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,subject_id,title,description,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
-        foreach ($rows as $r) {
-            $ins->execute([$targetPlan['id'],$targetStudent,$r['subject_id'],$r['title'],$r['description'],$r['task_type'],$r['day_index'],$r['unit_index'],$r['target_count'],$r['target_unit'],$r['duration_min'],$r['priority'],$r['sort_order']]);
-            $n++;
+        $hasSource = ensure_source_column();
+        if ($hasSource) {
+            $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,subject_id,title,description,source,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+            foreach ($rows as $r) {
+                $ins->execute([$targetPlan['id'],$targetStudent,$r['subject_id'],$r['title'],$r['description'],$r['source']??null,$r['task_type'],$r['day_index'],$r['unit_index'],$r['target_count'],$r['target_unit'],$r['duration_min'],$r['priority'],$r['sort_order']]);
+                $n++;
+            }
+        } else {
+            $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,subject_id,title,description,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+            foreach ($rows as $r) {
+                $ins->execute([$targetPlan['id'],$targetStudent,$r['subject_id'],$r['title'],$r['description'],$r['task_type'],$r['day_index'],$r['unit_index'],$r['target_count'],$r['target_unit'],$r['duration_min'],$r['priority'],$r['sort_order']]);
+                $n++;
+            }
         }
         db()->prepare('UPDATE plans SET title=?, status="draft", note=? WHERE id=?')->execute([$src['title'], $src['note'], $targetPlan['id']]);
         db()->commit();
@@ -233,7 +314,8 @@ case 'seed_special': {
     if (!in_array($role, ['advisor','admin'], true)) json_out(['ok'=>false,'error'=>'دسترسی ندارید'],403);
     $planId=(int)($in['plan_id']??0);
     if (!plan_owned_by_advisor($planId,$me,$role)) json_out(['ok'=>false,'error'=>'برنامه نامعتبر'],403);
-    $added = seed_special_tasks($planId);
+    $cfg = advisor_settings($me);
+    $added = seed_special_tasks($planId, (int)$cfg['special_reading_min'], (int)$cfg['special_exam_min']);
     json_out(['ok'=>true,'added'=>$added]);
 }
 
@@ -303,7 +385,7 @@ default:
 /* ---- رندر JSON یک تسک برای فرانت ---- */
 function render_task(array $t): array {
     return [
-        'id'=>(int)$t['id'],'title'=>$t['title'],'description'=>$t['description'],
+        'id'=>(int)$t['id'],'title'=>$t['title'],'description'=>$t['description'],'source'=>$t['source']??null,
         'task_type'=>$t['task_type'],'type_label'=>TASK_TYPES[$t['task_type']]['label']??$t['task_type'],
         'day_index'=>(int)$t['day_index'],'unit_index'=>(int)$t['unit_index'],
         'target_count'=>$t['target_count']!==null?(int)$t['target_count']:null,'target_unit'=>$t['target_unit'],

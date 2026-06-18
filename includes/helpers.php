@@ -144,5 +144,8 @@ const TASK_TYPES = [
   'descriptive' => ['label'=>'سوال تشریحی','icon'=>'edit'],
   'reading'     => ['label'=>'روزخوانی','icon'=>'glasses'],
   'exam'        => ['label'=>'آزمونک','icon'=>'clipboard'],
+  'analysis'    => ['label'=>'تحلیل آزمون','icon'=>'chart'],
+  'special'     => ['label'=>'واحد ویژه','icon'=>'sparkles'],
+  'mock'        => ['label'=>'آزمون','icon'=>'clipboard'],
   'custom'      => ['label'=>'دلخواه','icon'=>'star'],
 ];
