@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>پیش‌نمایش پنل افزودن تسک · مَدار</title>
+<style>
+  :root{
+    --bg:#0c1512;--surface:#121d18;--surface-2:#1a241f;--surface-3:#222e29;--card:#16211c;
+    --border:#283530;--border-soft:#1f2a25;--sage:#6b8872;--sage-light:#8aa791;--sage-glass:rgba(107,136,114,.14);
+    --gold:#cbac80;--gold-light:#e0c595;--gold-glass:rgba(203,172,128,.14);
+    --text:#eef2ee;--text-2:#b9c4bd;--text-3:#7f8d86;--text-faint:#57635c;--danger:#d98b8b;
+    --r-sm:12px;--r-md:16px;--r-lg:24px;--r-xl:30px;--r-pill:999px;--ease:cubic-bezier(.4,0,.2,1);
+    --sh-lg:0 30px 80px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:Vazirmatn,Tahoma,sans-serif;line-height:1.7;
+    display:flex;align-items:center;justify-content:center;min-height:100vh;padding:18px}
+  .modal{width:min(1080px,96vw);max-height:94vh;border:1px solid var(--border);border-radius:var(--r-xl);
+    background:linear-gradient(160deg,var(--surface-2),var(--surface));box-shadow:var(--sh-lg);
+    display:flex;flex-direction:column;overflow:hidden}
+  .tm-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border-soft)}
+  .tm-title{display:flex;align-items:center;gap:13px}
+  .tm-ico{width:44px;height:44px;border-radius:13px;background:linear-gradient(160deg,var(--gold-light),var(--gold));color:#1a1206;display:grid;place-items:center}
+  .tm-title h3{font-size:1.15rem;margin:0}
+  .tm-sub{font-size:.78rem;color:var(--text-3);display:block;margin-top:2px}
+  .x{width:36px;height:36px;border-radius:12px;background:var(--surface-3);border:none;color:var(--text-2);cursor:pointer}
+  .tm-grid{display:grid;grid-template-columns:1.05fr 1fr;gap:24px;padding:20px 22px;overflow:auto}
+  @media(max-width:760px){.tm-grid{grid-template-columns:1fr}}
+  .tm-col{display:flex;flex-direction:column;gap:14px}
+  label{display:flex;align-items:center;gap:6px;font-weight:700;font-size:.84rem;margin-bottom:8px}
+  .muted{color:var(--text-3);font-weight:400}
+  .subj-chips{display:flex;flex-wrap:wrap;gap:7px}
+  .subj-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:var(--r-pill);
+    border:1.5px solid var(--border-soft);background:var(--surface);color:var(--text-2);font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;transition:.16s}
+  .subj-chip:hover{border-color:var(--c,var(--sage));color:var(--text)}
+  .subj-chip.active{border-color:var(--c,var(--gold));color:var(--text);background:color-mix(in srgb,var(--c,var(--gold)) 16%,transparent);box-shadow:0 0 0 1px var(--c,var(--gold)) inset}
+  .subj-dot{width:9px;height:9px;border-radius:50%}
+  .type-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  @media(max-width:760px){.type-grid{grid-template-columns:repeat(3,1fr)}}
+  .type-opt{padding:9px 6px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--surface);text-align:center;cursor:pointer;transition:.18s}
+  .type-opt:hover{border-color:var(--sage)}
+  .type-opt.active{background:var(--sage-glass);border-color:var(--sage);color:var(--sage-light)}
+  .type-opt .ico{width:30px;height:30px;border-radius:9px;margin:0 auto 5px;display:grid;place-items:center;background:var(--surface-2);font-size:1rem}
+  .type-opt.active .ico{background:var(--sage);color:#0c1512}
+  .type-opt .t{font-size:.72rem;font-weight:700}
+  .quick-presets{display:flex;flex-wrap:wrap;gap:7px}
+  .quick-presets button{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);border-radius:var(--r-pill);padding:7px 11px;font:inherit;font-size:.76rem;font-weight:800;cursor:pointer;transition:.16s}
+  .quick-presets button:hover{border-color:var(--gold);color:var(--gold-light);background:var(--gold-glass)}
+  .input,.select{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text);padding:11px 13px;font:inherit;font-size:.9rem}
+  .row{display:grid;gap:12px}
+  .chap-quick{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .chap-quick button{border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);border-radius:9px;padding:4px 10px;font:inherit;font-size:.76rem;font-weight:800;cursor:pointer}
+  .chap-quick button:hover{border-color:var(--gold);color:var(--gold-light)}
+  .tm-preview{margin-top:auto;padding-top:14px;border-top:1px dashed var(--border-soft);display:flex;flex-direction:column;gap:7px}
+  .task-pill{padding:11px 12px;border-radius:13px;background:var(--surface-2);border:1px solid var(--border-soft);border-right:3px solid var(--sage);display:flex;flex-direction:column;gap:4px}
+  .task-pill.type-test{border-right-color:#e0c595;background:linear-gradient(135deg,rgba(203,172,128,.13),var(--surface-2))}
+  .task-pill.type-study{border-right-color:#8aa791}
+  .task-pill.type-review{border-right-color:#6f9bc0}
+  .tp-title{font-weight:700}.tp-meta{font-size:.72rem;color:var(--text-3)}
+  .tp-type{font-size:.66rem;padding:1px 6px;border-radius:6px;background:var(--surface-3);color:var(--text-2);align-self:flex-start;font-weight:800}
+  .tm-footer{display:flex;align-items:center;gap:12px;padding:14px 22px;border-top:1px solid var(--border-soft);background:rgba(12,21,18,.4)}
+  .tm-hint{font-size:.76rem;color:var(--text-3);margin-inline:auto}.tm-hint b{color:var(--gold-light)}
+  .btn-gold{background:linear-gradient(160deg,var(--gold-light),var(--gold));color:#1a1206;border:none;border-radius:var(--r-pill);padding:12px 22px;font:inherit;font-weight:800;cursor:pointer;min-width:170px}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--danger);border-radius:var(--r-pill);padding:11px 16px;font:inherit;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+  <div class="modal">
+    <div class="tm-head">
+      <div class="tm-title">
+        <span class="tm-ico" id="hico">➕</span>
+        <div><h3>افزودن تسک</h3><span class="tm-sub" id="sub">درس و نوع را انتخاب کنید؛ بقیه‌ی موارد خودکار پر می‌شوند.</span></div>
+      </div>
+      <button class="x">✕</button>
+    </div>
+    <div class="tm-grid">
+      <div class="tm-col">
+        <div>
+          <label>📖 درس</label>
+          <div class="subj-chips" id="chips"></div>
+        </div>
+        <div>
+          <label>🗂️ نوع تسک</label>
+          <div class="type-grid" id="types"></div>
+        </div>
+        <div>
+          <label>⚡ تسک‌های آماده <span class="muted">(یک‌کلیک، خودکار پر می‌شود)</span></label>
+          <div class="quick-presets" id="presets"></div>
+        </div>
+      </div>
+      <div class="tm-col">
+        <div>
+          <label>📖 عنوان تسک <span class="muted">(درس + فصل)</span></label>
+          <input class="input" id="title" placeholder="با انتخاب درس خودکار پر می‌شود — مثلاً «زیست ف۴»">
+          <div class="chap-quick" id="chap" hidden><span class="muted">فصل سریع:</span></div>
+        </div>
+        <div class="row" style="grid-template-columns:1.3fr 1fr">
+          <div><label>🎯 مقدار هدف</label><input class="input" id="target" type="number" placeholder="۴۰"></div>
+          <div><label>📋 واحد</label><select class="select" id="unit"><option>تست</option><option>درسنامه</option><option>صفحه</option><option>دقیقه</option><option>ساعت</option><option>مبحث</option></select></div>
+        </div>
+        <div class="row" style="grid-template-columns:1fr 1fr">
+          <div><label>⏱️ مدت</label><select class="select" id="dur"><option value="">اختیاری</option><option>15</option><option>30</option><option>45</option><option>50</option><option>60</option><option>90</option><option>120</option></select></div>
+          <div><label>🚩 اولویت <span class="muted">(اختیاری)</span></label><select class="select" id="prio"><option value="">بدون اولویت</option><option>عادی</option><option>مهم</option><option>کم‌اهمیت</option></select></div>
+        </div>
+        <div><label>📚 منبع <span class="muted">(آزاد بنویسید)</span></label><input class="input" id="src" placeholder="مثلاً کتاب درسی، آزمون ماز، جزوه کلاس…"></div>
+        <div><label>📝 توضیحات <span class="muted">(اختیاری)</span></label><textarea class="input" id="desc" rows="2"></textarea></div>
+        <div class="tm-preview">
+          <span class="muted" style="font-size:.74rem">👁️ پیش‌نمایش:</span>
+          <div class="task-pill type-test" id="pill"><span class="tp-title" id="pvt">تسک</span><span class="tp-meta" id="pvm"></span><span class="tp-type" id="pvy">تست</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="tm-footer">
+      <button class="btn-ghost">🗑 حذف</button>
+      <span class="tm-hint">ℹ️ با <b>Ctrl+Enter</b> سریع ذخیره کنید</span>
+      <button class="btn-gold">✔ ذخیره تسک</button>
+    </div>
+  </div>
+<script>
+  const SUBJECTS=[
+    {id:1,name:'زیست‌شناسی',color:'#3B8B5B',t:40},{id:2,name:'شیمی',color:'#B58A45',t:30},
+    {id:3,name:'فیزیک',color:'#3F7F9F',t:30},{id:4,name:'ریاضی',color:'#6E5B9A',t:35},
+    {id:5,name:'ادبیات',color:'#9A5A8A',t:20},{id:6,name:'عربی',color:'#A0754C',t:20},
+  ];
+  const TYPES=[['study','📘','مطالعه'],['test','✅','تست'],['review','🔁','مرور'],['textbook','📗','کتاب درسی'],
+    ['descriptive','✍️','تشریحی'],['reading','👓','روزخوانی'],['exam','📋','آزمونک'],
+    ['analysis','📊','تحلیل آزمون'],['special','✨','واحد ویژه'],['mock','🧪','آزمون'],['custom','⭐','دلخواه']];
+  const PRESETS=[['study_test30','📘 درسنامه + ۳۰ تست'],['study_test35','📘 درسنامه + ۳۵ تست'],['study_test40','📘 درسنامه + ۴۰ تست'],
+    ['class_video','▶️ مطابق کلاس/ویدیو'],['test_bank','📋 بانک تست'],['analysis','📊 تحلیل آزمون'],['mock','🧪 آزمون'],
+    ['test30','✅ ۳۰ تست'],['test40','✅ ۴۰ تست'],['errorbook','🔁 غلط‌نامه'],
+    ['review15','🔁 مرور ویژه ۱۵د'],['desc','✍️ تشریحی'],['reading','👓 روزخوانی'],['exam','📋 آزمونک']];
+
+  let subj='',type='study';const sm={};SUBJECTS.forEach(s=>sm[s.id]=s);
+  const $=id=>document.getElementById(id);
+  // chips
+  $('chips').innerHTML='<button class="subj-chip active" data-s="">✕ بدون درس</button>'+
+    SUBJECTS.map(s=>`<button class="subj-chip" data-s="${s.id}" style="--c:${s.color}"><span class="subj-dot" style="background:${s.color}"></span>${s.name}</button>`).join('');
+  $('types').innerHTML=TYPES.map(t=>`<div class="type-opt ${t[0]==='study'?'active':''}" data-t="${t[0]}"><div class="ico">${t[1]}</div><div class="t">${t[2]}</div></div>`).join('');
+  $('presets').innerHTML=PRESETS.map(p=>`<button data-p="${p[0]}">${p[1]}</button>`).join('');
+  ['ف۱','ف۲','ف۳','ف۴','ف۵','ف۶','ف۷'].forEach(c=>$('chap').insertAdjacentHTML('beforeend',`<button data-c="${c}">${c}</button>`));
+
+  function name(){return sm[subj]?sm[subj].name:''}
+  function buildTitle(){if(['reading','exam'].includes(type))return TYPES.find(t=>t[0]===type)[2];
+    const m=$('title').value.match(/ف[۰-۹\d]+/);return name()? name()+(m?' '+m[0]:''):(TYPES.find(t=>t[0]===type)[2]);}
+  function fill(){
+    const td=sm[subj]?sm[subj].t:30;
+    const map={study:['','درسنامه','90'],test:[String(td),'تست','60'],review:['','مبحث','45'],
+      textbook:['20','صفحه','60'],descriptive:['10','سوال','60'],reading:['1','ساعت','60'],exam:['50','دقیقه','50'],
+      analysis:['','دقیقه','60'],special:['','دقیقه','60'],mock:['','دقیقه','120'],custom:['','تست','60']};
+    const d=map[type];$('target').value=d[0];$('unit').value=d[1];$('dur').value=d[2];$('title').value=buildTitle();
+    $('prio').value='';upd();  // بدون اولویت
+  }
+  function upd(){
+    $('pill').className='task-pill type-'+type;$('pvt').textContent=$('title').value||buildTitle()||'تسک';
+    const meta=[];if($('target').value)meta.push($('target').value+' '+$('unit').value);if($('dur').value)meta.push($('dur').value+' دقیقه');
+    if($('src').value.trim())meta.push('منبع: '+$('src').value.trim());
+    $('pvm').textContent=meta.join(' · ');$('pvy').textContent=TYPES.find(t=>t[0]===type)[2];
+    $('sub').textContent=name()?('درس: '+name()+' — خودکار پر شد، در صورت نیاز ویرایش کنید.'):'درس و نوع را انتخاب کنید؛ بقیه‌ی موارد خودکار پر می‌شوند.';
+  }
+  $('chips').onclick=e=>{const c=e.target.closest('.subj-chip');if(!c)return;subj=c.dataset.s;
+    $('chips').querySelectorAll('.subj-chip').forEach(x=>x.classList.toggle('active',x===c));$('chap').hidden=!subj;fill();};
+  $('types').onclick=e=>{const o=e.target.closest('.type-opt');if(!o)return;type=o.dataset.t;
+    $('types').querySelectorAll('.type-opt').forEach(x=>x.classList.toggle('active',x===o));$('hico').textContent=TYPES.find(t=>t[0]===type)[1];fill();};
+  $('presets').onclick=e=>{const b=e.target.closest('[data-p]');if(!b)return;const k=b.dataset.p;
+    const map={study_test30:['study',30],study_test35:['study',35],study_test40:['study',40],test30:['test',30],test40:['test',40],test50:['test',50],errorbook:['review',''],review15:['review',''],desc:['descriptive',10],reading:['reading',1],exam:['exam',50],class_video:['study',''],test_bank:['test',30],analysis:['analysis',''],mock:['mock','']};
+    const [tp,tg]=map[k];type=tp;$('types').querySelectorAll('.type-opt').forEach(x=>x.classList.toggle('active',x.dataset.t===tp));
+    fill();if(tg!=='')$('target').value=(k.startsWith('study_test')&&sm[subj])?sm[subj].t:tg;
+    if(k==='review15')$('dur').value='15';if(k.startsWith('study_test'))$('unit').value='تست';
+    if(k==='class_video'){$('title').value=(name()||'')+' مطابق کلاس/ویدیو';$('src').value='کلاس/ویدیو';}
+    if(k==='test_bank'){$('src').value='بانک تست';}
+    upd();};
+  $('chap').onclick=e=>{const b=e.target.closest('[data-c]');if(!b)return;$('title').value=(name()||'')+' '+b.dataset.c;upd();};
+  ['title','target','unit','dur','src'].forEach(id=>$(id).addEventListener('input',upd));
+  fill();
+</script>
+</body>
+</html>

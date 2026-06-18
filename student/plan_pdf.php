@@ -108,6 +108,7 @@ function pdf_task_meta(array $t): array {
     $meta = [];
     if ($t['target_count'] !== null) $meta[] = fa_num($t['target_count']) . ' ' . e($t['target_unit']);
     if (!empty($t['duration_min'])) $meta[] = fa_num($t['duration_min']) . ' دقیقه';
+    if (!empty($t['source'])) $meta[] = 'منبع: ' . e($t['source']);
     return $meta;
 }
 function pdf_render_task(array $t, int $idx): void {

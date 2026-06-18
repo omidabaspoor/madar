@@ -73,6 +73,7 @@ panel_start('برنامه من', $plan ? (jalali_date($weekStart) . ' تا ' . j
           <span class="badge" style="font-size:.7rem;padding:2px 8px"><?= e($typeLabel) ?></span>
           <?php if($t['target_count']!==null):?><span class="st-prog st-prog-count" data-unit="<?= e($t['target_unit']) ?>"><?= fa_num($t['done_count']) ?>/<?= fa_num($t['target_count']) ?> <?= e($t['target_unit']) ?></span>
           <?php elseif($t['duration_min']):?><span class="st-prog"><?= fa_num($t['duration_min']) ?> دقیقه</span><?php endif;?>
+          <?php if(!empty($t['source'])):?><span class="st-src"><?= icon('book',12) ?> <?= e($t['source']) ?></span><?php endif;?>
         </div>
         <?php if($t['student_note']):?>
           <div class="st-note-box"><span class="st-note-text" data-raw="<?= e($t['student_note']) ?>"><?= icon('note',13) ?> <?= e($t['student_note']) ?></span> <button class="st-note-edit" data-note="<?= (int)$t['id'] ?>">ویرایش</button></div>

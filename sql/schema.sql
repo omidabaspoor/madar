@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   subject_id    INT UNSIGNED DEFAULT NULL,
   title         VARCHAR(160) NOT NULL,           -- مثلا «زیست ف۴»
   description   VARCHAR(255) DEFAULT NULL,
-  task_type     ENUM('test','study','review','textbook','descriptive','exam','reading','custom') NOT NULL DEFAULT 'study',
+  source        VARCHAR(120) DEFAULT NULL,        -- منبع آزاد (کتاب، آزمون ماز، …)
+  task_type     ENUM('test','study','review','textbook','descriptive','exam','reading','custom','analysis','special','mock') NOT NULL DEFAULT 'study',
   day_index     TINYINT UNSIGNED NOT NULL,       -- 0..6
   unit_index    TINYINT UNSIGNED NOT NULL DEFAULT 1, -- 1..8 (8=ویژه)
   target_count  INT UNSIGNED DEFAULT NULL,       -- مثلا 40 تست

@@ -29,7 +29,72 @@ if ($run) {
     // 2) اجرای schema
     $sql = file_get_contents(__DIR__ . '/sql/schema.sql');
     $pdo->exec($sql);
-    $messages[] = 'جداول ایجاد شدند.';
+    $messages[] = 'جداول اصلی ایجاد/به‌روزرسانی شدند.';
+
+    // 2b) اجرای همه‌ی مهاجرت‌ها (idempotent) — حتی روی نصب‌های قبلی
+    //     این کار باعث می‌شود با باز کردن install.php دیتابیس کامل به‌روز شود.
+    $migrations = [
+        'upgrade_task_types.sql'       => 'نوع‌های جدید تسک (کتاب درسی، تشریحی)',
+        'upgrade_task_types2.sql'      => 'نوع‌های تسک (تحلیل آزمون، واحد ویژه، آزمون) + ستون منبع',
+        'upgrade_subject_palette.sql'  => 'پالت رنگ درس‌ها',
+        'upgrade_messages_media.sql'   => 'پیوست رسانه در پیام‌ها',
+        'upgrade_achievements.sql'     => 'سیستم دستاوردها',
+        'upgrade_exams.sql'            => 'سیستم آزمون',
+        'upgrade_planner_settings.sql' => 'پیش‌فرض‌های برنامه‌ریز + حافظه‌ی هوشمند',
+    ];
+    foreach ($migrations as $file => $label) {
+        $path = __DIR__ . '/sql/' . $file;
+        if (!is_file($path)) continue;
+        try {
+            $pdo->exec(file_get_contents($path));
+            $messages[] = 'مهاجرت اعمال شد: ' . $label;
+        } catch (Throwable $mEx) {
+            // برخی مهاجرت‌ها ممکن است قبلاً اعمال شده باشند؛ نادیده بگیر
+            $messages[] = 'مهاجرت «' . $label . '» رد شد (احتمالاً از قبل اعمال شده).';
+        }
+    }
+
+    // 2b-2) اطمینان قطعی از نوع‌های تسک و ستون منبع (idempotent، حتی اگر مهاجرت ناقص اجرا شد)
+    try {
+        $pdo->exec("ALTER TABLE tasks MODIFY task_type ENUM('test','study','review','textbook','descriptive','exam','reading','custom','analysis','special','mock') NOT NULL DEFAULT 'study'");
+        $messages[] = 'نوع‌های تسک به‌روزرسانی شدند.';
+    } catch (Throwable $e) { /* احتمالاً از قبل */ }
+    try {
+        $col = $pdo->query("SHOW COLUMNS FROM tasks LIKE 'source'")->fetch();
+        if (!$col) { $pdo->exec("ALTER TABLE tasks ADD COLUMN source VARCHAR(120) DEFAULT NULL AFTER description"); }
+        $messages[] = 'ستون «منبع» آماده است.';
+    } catch (Throwable $e) { /* ignore */ }
+
+    // 2c) اطمینان از وجود ستون‌ها/جداول کلیدیِ تنظیمات (پشتیبان در صورت نبود فایل مهاجرت)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS advisor_settings (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        advisor_id INT UNSIGNED NOT NULL,
+        skey VARCHAR(60) NOT NULL,
+        svalue VARCHAR(255) DEFAULT NULL,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id), UNIQUE KEY uq_advisor_key (advisor_id, skey), KEY idx_setting_advisor (advisor_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS planner_memory (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        advisor_id INT UNSIGNED NOT NULL,
+        scope VARCHAR(20) NOT NULL DEFAULT 'global',
+        ctx_key VARCHAR(60) NOT NULL DEFAULT '*',
+        task_type VARCHAR(20) DEFAULT NULL,
+        subject_id INT UNSIGNED DEFAULT NULL,
+        target_count INT DEFAULT NULL,
+        target_unit VARCHAR(20) DEFAULT NULL,
+        duration_min INT DEFAULT NULL,
+        priority VARCHAR(10) DEFAULT NULL,
+        source VARCHAR(120) DEFAULT NULL,
+        hits INT UNSIGNED NOT NULL DEFAULT 1,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id), UNIQUE KEY uq_mem (advisor_id, scope, ctx_key), KEY idx_mem_advisor (advisor_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    try {
+        $c = $pdo->query("SHOW COLUMNS FROM planner_memory LIKE 'source'")->fetch();
+        if (!$c) { $pdo->exec("ALTER TABLE planner_memory ADD COLUMN source VARCHAR(120) DEFAULT NULL AFTER priority"); }
+    } catch (Throwable $e) { /* ignore */ }
+    $messages[] = 'جدول‌های تنظیمات و حافظه‌ی هوشمند آماده‌اند.';
 
     // 3) داده‌ی نمونه (فقط اگر کاربری نیست)
     $exists = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
