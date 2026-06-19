@@ -576,3 +576,133 @@ function attempt_report(int $attemptId): ?array {
     unset($s);
     return ['attempt'=>$att,'exam'=>$exam,'sections'=>$secStats,'questions'=>$byList];
 }
+
+/* ======================= chapters ======================= */
+/** آیا جدول chapters وجود دارد؟ */
+function chapters_table_ready(): bool {
+    static $ok = null;
+    if ($ok !== null) return $ok;
+    try { db()->query('SELECT 1 FROM chapters LIMIT 1'); return $ok = true; }
+    catch (Throwable $e) { return $ok = false; }
+}
+
+/** نگاشت نام درس دیتابیس به کلید فصل‌ها */
+function normalize_subject_for_chapters(string $name): ?string {
+    $n = trim($name);
+    if (mb_strpos($n, 'زیست') !== false) return 'زیست‌شناسی';
+    if (mb_strpos($n, 'حسابان') !== false) return 'حسابان';
+    if (mb_strpos($n, 'هندسه') !== false) return 'هندسه';
+    if (mb_strpos($n, 'گسسته') !== false) return 'ریاضیات گسسته';
+    if (mb_strpos($n, 'ریاضی') !== false) return 'ریاضی';
+    if (mb_strpos($n, 'شیمی') !== false) return 'شیمی';
+    if (mb_strpos($n, 'فیزیک') !== false) return 'فیزیک';
+    if (mb_strpos($n, 'عربی') !== false) return 'عربی، زبان قرآن';
+    if (mb_strpos($n, 'دین') !== false || mb_strpos($n, 'دینی') !== false) return 'دین و زندگی';
+    if (mb_strpos($n, 'ادبیات') !== false || mb_strpos($n, 'فارسی') !== false) return 'فارسی';
+    if (mb_strpos($n, 'انگلیسی') !== false) return 'زبان انگلیسی';
+    if (mb_strpos($n, 'هویت') !== false) return 'هویت اجتماعی';
+    if (mb_strpos($n, 'سلامت') !== false) return 'سلامت و بهداشت';
+    return null;
+}
+
+/** نگاشت رشته و پایه به مقادیر استاندارد */
+function student_field_key(string $field): string {
+    $f = trim($field);
+    if ($f === 'تجربی' || $f === 'tajrobi') return 'tajrobi';
+    if ($f === 'ریاضی' || $f === 'riazi') return 'riazi';
+    if ($f === 'انسانی' || $f === 'omumi') return 'omumi';
+    return 'omumi';
+}
+function student_grade_number(string $grade): int {
+    $g = trim($grade);
+    if ($g === 'دهم' || $g === '10') return 10;
+    if ($g === 'یازدهم' || $g === '11') return 11;
+    if ($g === 'دوازدهم' || $g === '12' || $g === 'کنکوری') return 12;
+    if (preg_match('/(\d+)/', $g, $m)) return (int)$m[1];
+    return 12;
+}
+
+/** گرفتن فصل‌ها بر اساس درس، رشته و پایه دانش‌آموز */
+function chapters_for_subject(string $subjectName, string $studentField): array {
+    if (!chapters_table_ready()) return [];
+    $key = normalize_subject_for_chapters($subjectName);
+    if (!$key) return [];
+    $field = student_field_key($studentField);
+
+    $sql = 'SELECT * FROM chapters WHERE subject_name=? AND field=? AND is_active=1 ORDER BY grade, sort_order';
+    $st = db()->prepare($sql);
+    $st->execute([$key, $field]);
+    $rows = $st->fetchAll();
+
+    $out = [];
+    foreach ($rows as $r) {
+        $out[$r['book_name']][] = $r;
+    }
+    return $out;
+}
+
+/** همه فصل‌ها (برای مدیریت) */
+function all_chapters(?string $field = null, ?string $subjectName = null, ?int $grade = null): array {
+    if (!chapters_table_ready()) return [];
+    $sql = 'SELECT * FROM chapters WHERE 1=1';
+    $params = [];
+    if ($field) { $sql .= ' AND field=?'; $params[] = $field; }
+    if ($subjectName) { $sql .= ' AND subject_name=?'; $params[] = $subjectName; }
+    if ($grade) { $sql .= ' AND grade=?'; $params[] = $grade; }
+    $sql .= ' ORDER BY field, grade, subject_name, sort_order';
+    $st = db()->prepare($sql);
+    $st->execute($params);
+    return $st->fetchAll();
+}
+
+/** افزودن/ویرایش فصل */
+function save_chapter(array $data): int {
+    if (!chapters_table_ready()) return 0;
+    $id = (int)($data['id'] ?? 0);
+    $subjectName = normalize_subject_for_chapters($data['subject_name'] ?? '') ?? trim($data['subject_name'] ?? '');
+    $grade = max(10, min(12, (int)($data['grade'] ?? 12)));
+    $field = student_field_key($data['field'] ?? 'omumi');
+    $bookName = trim($data['book_name'] ?? '');
+    $chapterName = trim($data['chapter_name'] ?? '');
+    $sortOrder = (int)($data['sort_order'] ?? 0);
+    $advisorId = isset($data['advisor_id']) ? (int)$data['advisor_id'] : null;
+
+    if ($id) {
+        $st = db()->prepare('UPDATE chapters SET subject_name=?, grade=?, field=?, book_name=?, chapter_name=?, sort_order=?, is_system=0, advisor_id=?, updated_at=NOW() WHERE id=?');
+        $st->execute([$subjectName, $grade, $field, $bookName, $chapterName, $sortOrder, $advisorId, $id]);
+        return $id;
+    } else {
+        $st = db()->prepare('INSERT INTO chapters (subject_name, grade, field, book_name, chapter_name, sort_order, is_system, advisor_id) VALUES (?,?,?,?,?,?,0,?)');
+        $st->execute([$subjectName, $grade, $field, $bookName, $chapterName, $sortOrder, $advisorId]);
+        return (int)db()->lastInsertId();
+    }
+}
+
+function delete_chapter(int $id): bool {
+    if (!chapters_table_ready()) return false;
+    $st = db()->prepare('DELETE FROM chapters WHERE id=?');
+    $st->execute([$id]);
+    return $st->rowCount() > 0;
+}
+
+function seed_system_chapters(): int {
+    require_once __DIR__ . '/chapter_data.php';
+    if (!chapters_table_ready()) return 0;
+    $data = chapter_seed_data();
+    $count = 0;
+    foreach ($data as $field => $books) {
+        foreach ($books as $book) {
+            $subjectKey = normalize_subject_for_chapters($book['book_name'] ?? '') ?? $book['book_name'];
+            foreach ($book['chapters'] as $i => $chName) {
+                $chk = db()->prepare('SELECT id FROM chapters WHERE subject_name=? AND grade=? AND field=? AND book_name=? AND chapter_name=?');
+                $chk->execute([$subjectKey, $book['grade'], $field, $book['book_name'], $chName]);
+                if (!$chk->fetch()) {
+                    $st = db()->prepare('INSERT INTO chapters (subject_name, grade, field, book_name, chapter_name, sort_order, is_system) VALUES (?,?,?,?,?,?,1)');
+                    $st->execute([$subjectKey, $book['grade'], $field, $book['book_name'], $chName, $i]);
+                    $count++;
+                }
+            }
+        }
+    }
+    return $count;
+}

@@ -511,6 +511,35 @@ body.copy-mode .cell { cursor:copy; }
 .compact-task span { font-size:.72rem; color:var(--text-3); }
 .red-modal-list { max-height:min(56vh,460px); overflow:auto; padding-left:4px; }
 @media(max-width:600px){ .red-modal-top{flex-direction:column}.red-modal-top .btn{width:100%}.red-modal{max-width:calc(100vw - 22px)} }
+
+/* ============================================================
+   Chapter Picker Modal — مودال انتخاب فصل
+   ============================================================ */
+.chapter-picker-modal { max-width: min(900px, 96vw); width: 100%; max-height: 88vh; display: flex; flex-direction: column; border-radius: var(--r-xl); }
+.chapter-picker-modal .modal-head { border-bottom: 1px solid var(--border-soft); padding: 18px 22px; }
+.chapter-picker-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+.chapter-picker-footer { padding: 12px 22px; border-top: 1px solid var(--border-soft); display: flex; justify-content: flex-end; gap: 8px; }
+
+.cp-meta { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.cp-books { display: flex; flex-direction: column; gap: 20px; }
+.cp-book { border: 1px solid var(--border-soft); border-radius: var(--r-lg); overflow: hidden; background: var(--surface-2); }
+.cp-book-head { padding: 12px 16px; background: linear-gradient(90deg, rgba(203,172,128,.12), transparent); border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cp-book-num { width: 28px; height: 28px; border-radius: 50%; background: var(--gold-glass); color: var(--gold-light); display: grid; place-items: center; font-weight: 800; font-size: .82rem; flex-shrink: 0; }
+.cp-book-name { font-weight: 800; font-size: .95rem; color: var(--text-1); flex: 1; }
+.cp-chapters-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; padding: 12px; }
+@media (max-width: 600px) { .cp-chapters-grid { grid-template-columns: 1fr; } }
+.cp-chapter { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border-soft); background: var(--surface); cursor: pointer; transition: .15s; text-align: right; font-family: inherit; color: var(--text); }
+.cp-chapter:hover { border-color: var(--sage); background: var(--sage-glass); transform: translateX(-2px); }
+.cp-chap-num { width: 26px; height: 26px; border-radius: 50%; background: var(--surface-3); color: var(--text-3); display: grid; place-items: center; font-weight: 700; font-size: .76rem; flex-shrink: 0; transition: .15s; }
+.cp-chapter:hover .cp-chap-num { background: var(--sage); color: #0c1512; }
+.cp-chap-name { font-size: .85rem; font-weight: 700; line-height: 1.4; }
+
+/* chap-picker button inside form */
+.chap-picker-wrap { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.chap-picker-wrap .btn { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Keep the old chap-quick for fallback */
+.chap-quick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 /* fix spacing around closed red-tasks box */
 .red-tasks-closed { margin-top:18px; margin-bottom:20px; position:relative; z-index:1; width:100%; box-sizing:border-box; }
 .plan-summary + .red-tasks-closed { clear:both; }

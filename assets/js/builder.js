@@ -191,6 +191,9 @@
     if (subjChips) subjChips.querySelectorAll('.subj-chip').forEach(c=>c.classList.toggle('active', (c.dataset.subject||'')===String(id||'')));
     // فصل سریع فقط وقتی درس انتخاب شده معنی دارد
     if (chapQuick) chapQuick.hidden = !id;
+    // chapter picker button visibility
+    const cpWrap = document.getElementById('chapPickerWrap');
+    if (cpWrap) cpWrap.hidden = !id;
   }
 
   /* ---------------- modal helpers ---------------- */
@@ -549,6 +552,66 @@
                        + ' ' + b.dataset.chap;
     titleTouched = true; updatePreview(); titleInput.focus();
   });
+
+  /* ---------- chapter picker modal ---------- */
+  const chapterPickerModal = document.getElementById('chapterPickerModal');
+  const chapterPickerBody = document.getElementById('chapterPickerBody');
+  const chapterPickerBtn = document.getElementById('chapPickerBtn');
+
+  chapterPickerBtn?.addEventListener('click', async ()=>{
+    const sid = currentSubjectId();
+    if (!sid) { toast('ابتدا یک درس انتخاب کنید','error'); return; }
+    if (!window.API_CHAPTERS) { toast('سیستم فصل‌ها فعال نشده','error'); return; }
+    openModal('chapterPickerModal');
+    chapterPickerBody.innerHTML = '<div class="empty-state" style="padding:40px"><span class="spinner" style="width:28px;height:28px"></span><span>در حال بارگذاری فصل‌ها…</span></div>';
+    try {
+      const d = await api(window.API_CHAPTERS, { method:'POST', body: { action:'fetch', subject_id: sid, student_id: window.STUDENT_ID } });
+      if (!d.ok || !Object.keys(d.chapters||{}).length) {
+        chapterPickerBody.innerHTML = '<div class="empty-state" style="padding:40px"><div class="es-ico">📚</div><p>فصلی برای این درس و رشته/پایه‌ی دانش‌آموز یافت نشد.</p><p class="muted" style="font-size:.84rem">از فصل‌های سریع بالا یا عنوان دستی استفاده کنید.</p></div>';
+        return;
+      }
+      renderChapterPicker(d.chapters, d.subject_name, d.field);
+    } catch(err) {
+      chapterPickerBody.innerHTML = '<div class="empty-state" style="padding:40px"><div class="es-ico">⚠️</div><p>' + (err.error || 'خطا در بارگذاری فصل‌ها') + '</p></div>';
+    }
+  });
+
+  function renderChapterPicker(chapters, subjectName, field) {
+    const fieldLabels = { tajrobi:'تجربی', riazi:'ریاضی', omumi:'عمومی' };
+    let html = '<div class="cp-meta"><span class="badge badge-sage">' + esc(subjectName) + '</span>';
+    html += '<span class="badge">' + (fieldLabels[field] || field) + '</span>';
+    html += '<span class="badge badge-gold">همه پایه‌ها</span></div>';
+    html += '<div class="cp-books">';
+    let bookIndex = 0;
+    for (const [bookName, items] of Object.entries(chapters)) {
+      bookIndex++;
+      html += '<div class="cp-book"><div class="cp-book-head"><span class="cp-book-num">' + faNumLocal(bookIndex) + '</span>';
+      html += '<span class="cp-book-name">' + esc(bookName) + '</span><span class="badge">' + faNumLocal(items.length) + ' فصل</span></div>';
+      html += '<div class="cp-chapters-grid">';
+      for (const ch of items) {
+        const chTitle = ch.chapter_name || '';
+        const fullTitle = subjectName + ' ' + chTitle;
+        html += '<button type="button" class="cp-chapter" data-chapter-title="' + esc(chTitle) + '" data-full-title="' + esc(fullTitle) + '">';
+        html += '<span class="cp-chap-num">' + faNumLocal(ch.sort_order + 1) + '</span>';
+        html += '<span class="cp-chap-name">' + esc(chTitle) + '</span>';
+        html += '</button>';
+      }
+      html += '</div></div>';
+    }
+    html += '</div>';
+    chapterPickerBody.innerHTML = html;
+
+    chapterPickerBody.querySelectorAll('.cp-chapter').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const fullTitle = btn.dataset.fullTitle || (subjectName + ' ' + btn.dataset.chapterTitle);
+        titleInput.value = fullTitle;
+        titleTouched = true;
+        updatePreview();
+        closeModal('chapterPickerModal');
+        titleInput.focus();
+      });
+    });
+  }
   // Ctrl+Enter = quick save
   form.addEventListener('keydown', (e)=>{ if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); form.requestSubmit(); } });
   document.getElementById('stopPasteBtn')?.addEventListener('click', clearCopyMode);

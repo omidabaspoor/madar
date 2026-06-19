@@ -243,6 +243,12 @@ panel_start('برنامه‌ریز هفتگی', '', 'admin', 'plans', ['builder.
           <div class="field">
             <label for="f_title"><?= icon('book',15) ?> عنوان تسک <span class="muted">(درس + فصل)</span></label>
             <input class="input" id="f_title" name="title" placeholder="با انتخاب درس خودکار پر می‌شود — مثلاً «زیست ف۴»">
+            <div class="chap-picker-wrap" id="chapPickerWrap" hidden>
+              <button type="button" class="btn btn-sage btn-sm" id="chapPickerBtn">
+                <?= icon('book-open',15) ?> انتخاب فصل از کتاب درسی
+              </button>
+              <span class="muted" style="font-size:.74rem">بر اساس رشته‌ی <?= e($student['field'] ?: '—') ?> (همه پایه‌ها)</span>
+            </div>
             <div class="chap-quick" id="chapQuick" hidden>
               <span class="muted">فصل سریع:</span>
               <button type="button" data-chap="ف۱">ف۱</button>
@@ -332,6 +338,25 @@ panel_start('برنامه‌ریز هفتگی', '', 'admin', 'plans', ['builder.
   </div>
 </div>
 
+<!-- ===== chapter picker modal ===== -->
+<div class="modal-backdrop" id="chapterPickerModal">
+  <div class="modal chapter-picker-modal">
+    <div class="modal-head">
+      <div>
+        <h3><?= icon('book-open',20) ?> انتخاب فصل</h3>
+        <span class="muted" style="font-size:.78rem">کتاب و فصل موردنظر را انتخاب کنید؛ عنوان تسک خودکار پر می‌شود</span>
+      </div>
+      <button class="modal-close" data-close><?= icon('close',18) ?></button>
+    </div>
+    <div class="chapter-picker-body" id="chapterPickerBody">
+      <div class="empty-state" style="padding:40px"><span class="spinner" style="width:28px;height:28px"></span><span>در حال بارگذاری فصل‌ها…</span></div>
+    </div>
+    <div class="chapter-picker-footer">
+      <button type="button" class="btn btn-ghost btn-sm" data-close>بستن</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== right-click context menu ===== -->
 <div class="ctx-menu" id="ctxMenu" role="menu" hidden>
   <button type="button" class="ctx-item" data-act="edit"><?= icon('edit',15) ?> ویرایش تسک</button>
@@ -351,6 +376,8 @@ panel_start('برنامه‌ریز هفتگی', '', 'admin', 'plans', ['builder.
 
 <script>
   window.API_TASKS = '<?= url('api/tasks.php') ?>';
+  window.API_CHAPTERS = '<?= url('api/chapters.php') ?>';
+  window.STUDENT_ID = <?= (int)$studentId ?>;
   window.NOTIF_URL = '<?= url('api/notifications.php') ?>';
   window.NOTIF_READ_URL = '<?= url('api/notifications.php?read=1') ?>';
   window.TASK_TYPES = <?= json_encode(array_map(fn($k)=>['label'=>TASK_TYPES[$k]['label']], array_combine(array_keys(TASK_TYPES),array_keys(TASK_TYPES))), JSON_UNESCAPED_UNICODE) ?>;
