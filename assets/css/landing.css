@@ -279,3 +279,5 @@
   .win-side .ws-i { flex:1; height:26px; }
   .win-row { grid-template-columns: repeat(4,1fr); }
 }
+/* chosen madaar logo inside landing mockup */
+.win-side .ws-logo { background-image:url('../img/logo.png') !important; background-size:cover !important; background-position:center !important; box-shadow:0 8px 20px rgba(0,0,0,.22); }

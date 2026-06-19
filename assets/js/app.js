@@ -145,3 +145,47 @@
   window.addEventListener('offline', updateNet);
   window.addEventListener('online', () => toast('دوباره آنلاین شدید', 'success', 2000));
 })();
+
+/* ---------- PWA local notifications (review reminders) ---------- */
+(() => {
+  const canNotify = () => 'Notification' in window && 'serviceWorker' in navigator;
+  async function showFromSiteNotification(n){
+    if (!canNotify() || Notification.permission !== 'granted') return;
+    const key='madar_notif_shown_'+n.id;
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key,'1');
+    const reg = await navigator.serviceWorker.ready.catch(()=>null);
+    const title = n.title || 'یادآوری مَدار';
+    const opts = { body:n.body||'', icon:(window.MADAR_ICON||'/assets/icons/icon-192.png'), badge:(window.MADAR_BADGE||'/assets/icons/favicon-64.png'), data:{url:n.link||'/student/dashboard.php'}, dir:'rtl', lang:'fa' };
+    if (reg?.showNotification) reg.showNotification(title, opts); else new Notification(title, opts);
+  }
+  window.requestMadarNotifications = async () => {
+    if (!canNotify()) { toast('مرورگر این دستگاه اعلان وب‌اپ را پشتیبانی نمی‌کند','error'); return false; }
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') { toast('اعلان‌های وب‌اپ فعال شد 🔔','success'); document.querySelectorAll('[data-notif-enable]').forEach(b=>b.closest('.notif-permission')?.remove()); return true; }
+    toast('برای دریافت یادآوری مرور، باید اجازه اعلان را فعال کنی','info'); return false;
+  };
+  document.addEventListener('click', e=>{ const b=e.target.closest('[data-notif-enable]'); if(b) window.requestMadarNotifications(); });
+  window.addEventListener('load', async ()=>{
+    if (!canNotify() || Notification.permission !== 'granted' || !window.NOTIF_URL) return;
+    try { const r=await fetch(window.NOTIF_URL); const d=await r.json(); (d.items||[]).filter(n=>!Number(n.is_read) && (n.type==='review'||n.type==='calendar')).slice(0,4).forEach(showFromSiteNotification); } catch(_) {}
+  });
+})();
+
+/* ---------- PWA install prompt ---------- */
+(() => {
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); deferredPrompt = e;
+    document.querySelectorAll('[data-pwa-install]').forEach(b=>{ b.disabled=false; b.classList.add('ready'); });
+  });
+  window.installMadarPWA = async () => {
+    if (!deferredPrompt) { toast('اگر دکمه نصب نمایش داده نشد، از منوی مرورگر گزینه نصب یا Add to Home Screen را بزن','info',4200); return false; }
+    deferredPrompt.prompt();
+    const choice = await deferredPrompt.userChoice.catch(()=>null);
+    deferredPrompt = null;
+    if (choice?.outcome === 'accepted') toast('وب‌اپ مَدار در حال نصب است','success');
+    return choice?.outcome === 'accepted';
+  };
+  document.addEventListener('click', e=>{ if(e.target.closest('[data-pwa-install]')) window.installMadarPWA(); });
+})();

@@ -14,10 +14,13 @@ $plannerCfg = planner_config_js((int)$u['id']);
 
 // هفته (شنبه)
 $weekStart = isset($_GET['week']) ? week_saturday($_GET['week']) : week_saturday();
+task_status_schema_ready();
+auto_mark_missed_tasks($studentId);
 $plan = find_or_create_plan($studentId, (int)$u['id'], $weekStart);
 ensure_special_defaults_for_empty_plan((int)$plan['id']);
 $grid = tasks_grid((int)$plan['id']);
 $progress = plan_progress((int)$plan['id']);
+$redTasks = array_values(array_filter(plan_tasks((int)$plan['id']), fn($rt)=>task_status($rt)==='missed'));
 $subjects = all_subjects();
 $copyTargets = array_values(array_filter(advisor_students((int)$u['id'], 'active'), fn($s) => (int)$s['id'] !== $studentId));
 
@@ -123,8 +126,36 @@ panel_start('برنامه‌ریز هفتگی', '', 'admin', 'plans', ['builder.
 
 <div class="plan-summary">
   <div class="ps-item"><span class="icon-tile sage" style="width:38px;height:38px"><?= icon('list',18) ?></span><div><div class="v" id="sumTotal"><?= fa_num($progress['total']) ?></div><div class="k">کل تسک‌ها</div></div></div>
-  <div class="ps-item"><span class="icon-tile" style="width:38px;height:38px"><?= icon('check-circle',18) ?></span><div><div class="v" id="sumDone"><?= fa_num($progress['done']) ?></div><div class="k">انجام‌شده</div></div></div>
+  <div class="ps-item"><span class="icon-tile" style="width:38px;height:38px"><?= icon('check-circle',18) ?></span><div><div class="v" id="sumDone"><?= fa_num($progress['done_display']) ?></div><div class="k">انجام‌شده</div></div></div>
   <div class="ps-item" style="flex:1;min-width:200px"><div style="flex:1;width:100%"><div class="between" style="font-size:.78rem;margin-bottom:5px"><span class="k">پیشرفت دانش‌آموز</span><span class="v" id="sumPct" style="font-size:.95rem"><?= fa_num($progress['percent']) ?>٪</span></div><div class="progress"><span id="sumBar" style="width:<?= $progress['percent'] ?>%"></span></div></div></div>
+</div>
+
+<div class="copy-plan-panel red-tasks-mini red-tasks-closed">
+  <div><b>× تسک‌های قرمز این هفته</b><span class="muted">در یک پنجره مرتب نمایش داده می‌شود.</span></div>
+  <button class="btn btn-ghost btn-sm red-modal-btn" type="button" data-modal="redTasksModal">مشاهده <span><?= fa_num(count($redTasks)) ?></span></button>
+</div>
+
+<div class="modal-backdrop" id="redTasksModal">
+  <div class="modal red-modal">
+    <div class="modal-head">
+      <h3>× تسک‌های قرمز</h3>
+      <button class="modal-close" data-close><?= icon('close',18) ?></button>
+    </div>
+    <div class="red-modal-top">
+      <a href="?student=<?= $studentId ?>&week=<?= $prevWeek ?>" class="btn btn-ghost btn-sm"><?= icon('chevron-right',15) ?> هفته قبل</a>
+      <div class="red-range"><?= jalali_date($weekStart) ?> تا <?= jalali_date($weekEnd) ?></div>
+      <a href="?student=<?= $studentId ?>&week=<?= $nextWeek ?>" class="btn btn-ghost btn-sm">هفته بعد <?= icon('chevron-left',15) ?></a>
+    </div>
+    <?php if(!$redTasks): ?>
+      <div class="empty-state" style="padding:34px"><div class="es-ico">✓</div>برای این بازه تسک قرمزی ثبت نشده</div>
+    <?php else: ?>
+    <div class="compact-task-list red-modal-list">
+      <?php foreach ($redTasks as $rt): ?>
+        <div class="compact-task red"><b><?= e(DAY_NAMES[(int)$rt['day_index']]) ?> · <?= e($rt['title']) ?></b><span><?= e(TASK_TYPES[$rt['task_type']]['label']??'') ?><?= !empty($rt['source'])?' · '.e($rt['source']):'' ?></span></div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+  </div>
 </div>
 
 <!-- ===== task editor modal (full-screen, no-scroll) ===== -->
@@ -344,11 +375,12 @@ function ensure_special_defaults_for_empty_plan(int $planId): void {
     $cnt->execute([$planId]);
     if ((int)$cnt->fetchColumn() > 0) return;
     $cfg = advisor_settings((int)($plan['advisor_id'] ?? 0));
-    $rMin = (int)$cfg['special_reading_min']; $eMin = (int)$cfg['special_exam_min'];
+    $rMin = min(45, (int)$cfg['special_reading_min']); $eMin = (int)$cfg['special_exam_min'];
     $ins = db()->prepare('INSERT INTO tasks (plan_id,student_id,title,task_type,day_index,unit_index,target_count,target_unit,duration_min,priority,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
     for ($day=0; $day<7; $day++) {
         $ins->execute([$planId,$plan['student_id'],'روزخوانی','reading',$day,8,1,'ساعت',$rMin,'normal',1]);
-        $ins->execute([$planId,$plan['student_id'],'آزمونک','exam',$day,8,50,'دقیقه',$eMin,'normal',2]);
+        $ins->execute([$planId,$plan['student_id'],'مرور ویژه','review',$day,8,15,'دقیقه',15,'normal',2]);
+        $ins->execute([$planId,$plan['student_id'],'آزمونک','exam',$day,8,50,'دقیقه',$eMin,'normal',3]);
     }
     $note = trim((string)($plan['note'] ?? ''));
     $note = $note ? ($note . "\n" . $marker) : $marker;
@@ -371,21 +403,24 @@ function subject_test_default(string $name): int {
 
 /* ---- helper: pill markup (server-side, mirrors JS) ---- */
 function builder_task_pill(array $t): string {
-    $done = (int)$t['is_done'] ? 'done' : '';
+    $st = task_status($t);
+    $done = $st === 'full' ? 'done' : ($st === 'partial' ? 'partial' : ($st === 'missed' ? 'missed' : ''));
     $meta = [];
     if ($t['target_count']!==null) $meta[] = fa_num($t['target_count']).' '.e($t['target_unit']);
     if ($t['duration_min']) $meta[] = fa_num($t['duration_min']).' دقیقه';
+    if (($t['course_percent'] ?? null) !== null) $meta[] = fa_num((int)$t['course_percent']).'٪ کورس';
     $metaStr = implode(' · ', $meta);
     $src = trim((string)($t['source'] ?? ''));
     $type = TASK_TYPES[$t['task_type']]['label'] ?? $t['task_type'];
-    return '<div class="task-pill type-'.e($t['task_type']).' '.$done.'" draggable="true" data-id="'.(int)$t['id'].'"'
+    $statusTxt = ['full'=>'✓ کامل','partial'=>'● ناقص','missed'=>'× قرمز','pending'=>'در انتظار'][$st] ?? '';
+    return '<div class="task-pill type-'.e($t['task_type']).' status-'.$st.' '.$done.'" draggable="true" data-id="'.(int)$t['id'].'"'
         .' data-json="'.e(json_encode([
             'id'=>(int)$t['id'],'title'=>$t['title'],'description'=>$t['description'],'source'=>$src,'task_type'=>$t['task_type'],
             'day_index'=>(int)$t['day_index'],'unit_index'=>(int)$t['unit_index'],
             'target_count'=>$t['target_count']!==null?(int)$t['target_count']:'','target_unit'=>$t['target_unit'],
             'duration_min'=>$t['duration_min']!==null?(int)$t['duration_min']:'','priority'=>$t['priority'],
             'subject_id'=>$t['subject_id']!==null?(int)$t['subject_id']:'',
-            'is_done'=>(int)$t['is_done'],
+            'is_done'=>(int)$t['is_done'],'completion_status'=>$st,
         ], JSON_UNESCAPED_UNICODE)).'">'
         .'<div class="tp-actions">'
         .'<button class="tp-copy" data-copy title="کپی این تسک">'.icon('copy',13).'</button>'
@@ -394,6 +429,6 @@ function builder_task_pill(array $t): string {
         .'<span class="tp-title">'.e($t['title']).'</span>'
         .($metaStr?'<span class="tp-meta">'.$metaStr.'</span>':'')
         .($src?'<span class="tp-src">'.icon('book',11).' '.e($src).'</span>':'')
-        .'<span class="tp-type">'.e($type).'</span>'
+        .'<span class="tp-type">'.e($type).' · '.$statusTxt.'</span>'
         .'</div>';
 }

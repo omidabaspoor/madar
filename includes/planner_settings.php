@@ -14,8 +14,11 @@ function planner_settings_defaults(): array {
         'paste_mode'          => 'single',      // single = یک‌بار | sticky = چندبار پشت‌سرهم
         'grid_density'        => 'comfortable', // comfortable | compact
         'smart_autofill'      => '1',           // پرکردن خودکار بر اساس انتخاب‌های قبلی
-        'special_reading_min' => '60',          // مدت روزخوانی پیش‌فرض واحد ویژه
+        'special_reading_min' => '45',          // مدت روزخوانی پیش‌فرض واحد ویژه
         'special_exam_min'    => '50',          // مدت آزمونک پیش‌فرض واحد ویژه
+        'insight_enabled'     => '1',           // نمایش تحلیل هوشمند
+        'review_enabled'      => '1',           // سیستم مرور فاصله‌دار
+        'web_notifications'   => '1',           // پیشنهاد اعلان وب‌اپ
     ];
 }
 
@@ -72,6 +75,8 @@ function planner_config_js(int $advisorId): array {
         'smartAutofill'    => $c['smart_autofill'] === '1',
         'specialReading'   => (int)$c['special_reading_min'],
         'specialExam'      => (int)$c['special_exam_min'],
+        'insightEnabled'   => $c['insight_enabled'] === '1',
+        'reviewEnabled'    => $c['review_enabled'] === '1',
     ];
 }
 
@@ -93,7 +98,7 @@ function save_planner_settings(int $advisorId, array $in): void {
         'smart_autofill'   => ['0','1'],
     ];
     $numeric  = ['default_duration','default_test_count','special_reading_min','special_exam_min'];
-    $checkbox = ['smart_autofill']; // چک‌باکس‌ها: نبودشان در POST یعنی خاموش
+    $checkbox = ['smart_autofill','insight_enabled','review_enabled','web_notifications']; // چک‌باکس‌ها: نبودشان در POST یعنی خاموش
     foreach ($allowed as $k => $def) {
         if (in_array($k, $checkbox, true)) {
             // اگر چک‌باکس تیک نخورده باشد اصلاً در POST نمی‌آید → '0'
@@ -228,4 +233,10 @@ function suggest_task_defaults(int $advisorId, ?int $unitIndex = null, ?int $sub
         } catch (Throwable $e) { /* try next */ }
     }
     return null;
+}
+
+
+function advisor_feature_enabled(int $advisorId, string $key): bool {
+    $cfg = advisor_settings($advisorId);
+    return ($cfg[$key] ?? '1') === '1';
 }

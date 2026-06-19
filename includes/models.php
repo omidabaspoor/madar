@@ -5,12 +5,114 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/planner_settings.php';
 
+
+/* ---------- سیستم سه‌حالته وضعیت تسک ---------- */
+const TASK_STATUS_LABELS = [
+    'pending' => 'در انتظار',
+    'full'    => 'اجرای کامل',
+    'partial' => 'اجرای ناقص',
+    'missed'  => 'عدم اجرا',
+];
+const TASK_FEELINGS = [
+    'great' => ['emoji'=>'😄','label'=>'عالی'],
+    'good'  => ['emoji'=>'🙂','label'=>'خوب'],
+    'hard'  => ['emoji'=>'😵‍💫','label'=>'سخت بود'],
+    'tired' => ['emoji'=>'😴','label'=>'خسته‌کننده'],
+    'bad'   => ['emoji'=>'😣','label'=>'بد/نامفهوم'],
+];
+function task_status_schema_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) return $ready;
+    try {
+        $cols = [];
+        foreach (db()->query('SHOW COLUMNS FROM tasks')->fetchAll() as $c) $cols[$c['Field']] = true;
+        if (empty($cols['completion_status'])) db()->exec("ALTER TABLE tasks ADD COLUMN completion_status ENUM('pending','full','partial','missed') NOT NULL DEFAULT 'pending' AFTER is_done");
+        if (empty($cols['course_percent'])) db()->exec("ALTER TABLE tasks ADD COLUMN course_percent TINYINT UNSIGNED DEFAULT NULL AFTER completion_status");
+        if (empty($cols['student_feeling'])) db()->exec("ALTER TABLE tasks ADD COLUMN student_feeling VARCHAR(30) DEFAULT NULL AFTER course_percent");
+        if (empty($cols['status_updated_at'])) db()->exec("ALTER TABLE tasks ADD COLUMN status_updated_at DATETIME DEFAULT NULL AFTER completed_at");
+        // تبدیل داده‌های قدیمی: تیک‌های قبلی = کامل، بقیه = در انتظار
+        db()->exec("UPDATE tasks SET completion_status=IF(is_done=1,'full','pending') WHERE completion_status IS NULL OR completion_status='' ");
+        return $ready = true;
+    } catch (Throwable $e) { return $ready = false; }
+}
+function task_status(array $t): string
+{
+    $s = (string)($t['completion_status'] ?? '');
+    if (isset(TASK_STATUS_LABELS[$s])) return $s;
+    return !empty($t['is_done']) ? 'full' : 'pending';
+}
+
+function score_display($v): string
+{
+    $f = (float)$v;
+    if (abs($f - round($f)) < 0.001) return (string)(int)round($f);
+    return rtrim(rtrim(number_format($f, 1, '.', ''), '0'), '.');
+}
+
+function task_score_sql(string $alias='t'): string
+{
+    // کامل = ۱ امتیاز؛ اگر تست/مقدار بیشتر از هدف زده شده باشد تا سقف ۰.۲۵ امتیاز تشویقی می‌گیرد.
+    // ناقص = ۰.۵ امتیاز ثابت؛ قرمز/درانتظار = ۰
+    return "CASE
+        WHEN {$alias}.completion_status='full' OR ({$alias}.completion_status IS NULL AND {$alias}.is_done=1) THEN
+            CASE WHEN {$alias}.target_count IS NOT NULL AND {$alias}.target_count > 0 AND {$alias}.done_count > {$alias}.target_count
+                 THEN 1 + LEAST(0.25, (({$alias}.done_count - {$alias}.target_count) / {$alias}.target_count) * 0.25)
+                 ELSE 1 END
+        WHEN {$alias}.completion_status='partial' THEN 0.5
+        ELSE 0 END";
+}
+function task_score(array $t): float
+{
+    $status = task_status($t);
+    if ($status === 'partial') return 0.5;
+    if ($status !== 'full') return 0.0;
+    $target = isset($t['target_count']) ? (int)$t['target_count'] : 0;
+    $done = isset($t['done_count']) ? (int)$t['done_count'] : 0;
+    if ($target > 0 && $done > $target) return 1.0 + min(0.25, (($done - $target) / $target) * 0.25);
+    return 1.0;
+}
+function is_feeling_task(string $type): bool
+{
+    return in_array($type, ['study','review','textbook','reading','analysis','custom'], true);
+}
+function feeling_info(?string $key): ?array
+{
+    return $key && isset(TASK_FEELINGS[$key]) ? TASK_FEELINGS[$key] : null;
+}
+/** تسک‌های روزهای گذشته که هنوز ثبت نشده‌اند، خودکار قرمز می‌شوند. */
+function auto_mark_missed_tasks(?int $studentId = null): int
+{
+    if (!task_status_schema_ready()) return 0;
+    $sql = "UPDATE tasks t JOIN plans p ON p.id=t.plan_id
+            SET t.completion_status='missed', t.is_done=0, t.done_count=0, t.course_percent=0,
+                t.completed_at=NULL, t.status_updated_at=NOW()
+            WHERE p.status='published' AND t.completion_status='pending'
+              AND DATE_ADD(p.week_start, INTERVAL t.day_index DAY) < CURDATE()";
+    $params = [];
+    if ($studentId !== null) { $sql .= ' AND t.student_id=?'; $params[] = $studentId; }
+    $st = db()->prepare($sql); $st->execute($params);
+    return $st->rowCount();
+}
+function task_status_badge(array $t): string
+{
+    $s = task_status($t);
+    $label = TASK_STATUS_LABELS[$s] ?? $s;
+    $icon = ['full'=>'✓','partial'=>'●','missed'=>'×','pending'=>'…'][$s] ?? '…';
+    return '<span class="task-status-badge ts-'.$s.'"><b>'.$icon.'</b> '.e($label).'</span>';
+}
+
 /* ---------- دانش‌آموزان یک مشاور ---------- */
 function advisor_students(int $advisorId, ?string $status = null, string $q = ''): array
 {
+    task_status_schema_ready();
+    $score = task_score_sql('t');
     $sql = 'SELECT u.*,
             (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id) AS total_tasks,
-            (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id AND t.is_done=1) AS done_tasks
+            (SELECT COALESCE(SUM('.$score.'),0) FROM tasks t WHERE t.student_id=u.id) AS done_tasks,
+            (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id AND t.completion_status="full") AS full_tasks,
+            (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id AND t.completion_status="partial") AS partial_tasks,
+            (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id AND t.completion_status="missed") AS missed_tasks
             FROM users u WHERE u.role="student" AND (u.advisor_id=? OR ? IN (SELECT id FROM users WHERE role="admin"))';
     $params = [$advisorId, $advisorId];
     if ($status) { $sql .= ' AND u.status=?'; $params[] = $status; }
@@ -72,11 +174,23 @@ function tasks_grid(int $planId): array
 
 function plan_progress(int $planId): array
 {
-    $st = db()->prepare('SELECT COUNT(*) total, COALESCE(SUM(is_done),0) done FROM tasks WHERE plan_id=?');
+    task_status_schema_ready();
+    $score = task_score_sql('t');
+    $st = db()->prepare("SELECT COUNT(*) total, COALESCE(SUM($score),0) score,
+        SUM(t.completion_status='full') full_count,
+        SUM(t.completion_status='partial') partial_count,
+        SUM(t.completion_status='missed') missed_count
+        FROM tasks t WHERE t.plan_id=?");
     $st->execute([$planId]);
     $r = $st->fetch();
-    $total = (int)$r['total']; $done = (int)$r['done'];
-    return ['total'=>$total,'done'=>$done,'percent'=>$total?round($done/$total*100):0];
+    $total = (int)$r['total']; $scoreVal = (float)$r['score'];
+    return [
+        'total'=>$total,
+        'done'=>$scoreVal,
+        'done_display'=>score_display($scoreVal),
+        'full'=>(int)$r['full_count'], 'partial'=>(int)$r['partial_count'], 'missed'=>(int)$r['missed_count'],
+        'percent'=>$total?round($scoreVal/$total*100):0
+    ];
 }
 
 /* ---------- درس‌ها ---------- */
@@ -88,6 +202,8 @@ function all_subjects(): array
 /* ---------- آمار دانش‌آموز ---------- */
 function student_today_tasks(int $studentId): array
 {
+    task_status_schema_ready();
+    auto_mark_missed_tasks($studentId);
     $weekStart = week_saturday();
     $todayIdx = persian_day_index(date('Y-m-d'));
     $st = db()->prepare('SELECT t.*, s.color subj_color, s.name subj_name FROM tasks t
@@ -101,29 +217,49 @@ function student_today_tasks(int $studentId): array
 
 function student_week_stats(int $studentId): array
 {
+    task_status_schema_ready();
+    auto_mark_missed_tasks($studentId);
     $weekStart = week_saturday();
-    $st = db()->prepare('SELECT COUNT(*) total, COALESCE(SUM(t.is_done),0) done
+    $score = task_score_sql('t');
+    $st = db()->prepare("SELECT COUNT(*) total, COALESCE(SUM($score),0) score,
+        SUM(t.completion_status='full') full_count,
+        SUM(t.completion_status='partial') partial_count,
+        SUM(t.completion_status='missed') missed_count
         FROM tasks t JOIN plans p ON p.id=t.plan_id
-        WHERE t.student_id=? AND p.week_start=? AND p.status="published"');
+        WHERE t.student_id=? AND p.week_start=? AND p.status=\"published\"");
     $st->execute([$studentId, $weekStart]);
     $r = $st->fetch();
-    $total=(int)$r['total']; $done=(int)$r['done'];
-    return ['total'=>$total,'done'=>$done,'percent'=>$total?round($done/$total*100):0];
+    $total=(int)$r['total']; $scoreVal=(float)$r['score'];
+    return [
+        'total'=>$total,'done'=>$scoreVal,
+        'done_display'=>score_display($scoreVal),
+        'full'=>(int)$r['full_count'], 'partial'=>(int)$r['partial_count'], 'missed'=>(int)$r['missed_count'],
+        'percent'=>$total?round($scoreVal/$total*100):0
+    ];
 }
 
 /** نمودار ۷ روز اخیر دانش‌آموز */
 function student_week_chart(int $studentId): array
 {
+    task_status_schema_ready();
+    auto_mark_missed_tasks($studentId);
     $out = [];
     $weekStart = week_saturday();
+    $score = task_score_sql('t');
     for ($i=0; $i<7; $i++) {
-        $st = db()->prepare('SELECT COUNT(*) total, COALESCE(SUM(t.is_done),0) done
+        $st = db()->prepare("SELECT COUNT(*) total, COALESCE(SUM($score),0) score,
+            SUM(t.completion_status='full') full_count,
+            SUM(t.completion_status='partial') partial_count,
+            SUM(t.completion_status='missed') missed_count
             FROM tasks t JOIN plans p ON p.id=t.plan_id
-            WHERE t.student_id=? AND p.week_start=? AND t.day_index=? AND p.status="published"');
+            WHERE t.student_id=? AND p.week_start=? AND t.day_index=? AND p.status=\"published\"");
         $st->execute([$studentId, $weekStart, $i]);
         $r = $st->fetch();
-        $total=(int)$r['total']; $done=(int)$r['done'];
-        $out[] = ['day'=>DAY_NAMES[$i],'total'=>$total,'done'=>$done,'pct'=>$total?round($done/$total*100):0];
+        $total=(int)$r['total']; $scoreVal=(float)$r['score'];
+        $out[] = ['day'=>DAY_NAMES[$i],'total'=>$total,'done'=>$scoreVal,
+            'done_display'=>score_display($scoreVal),
+            'full'=>(int)$r['full_count'], 'partial'=>(int)$r['partial_count'], 'missed'=>(int)$r['missed_count'],
+            'pct'=>$total?round($scoreVal/$total*100):0];
     }
     return $out;
 }
@@ -131,13 +267,15 @@ function student_week_chart(int $studentId): array
 /** پیشرفت به تفکیک درس */
 function student_subject_progress(int $studentId): array
 {
-    $st = db()->prepare('SELECT COALESCE(s.name,t.title) name, COALESCE(s.color,"#6b8872") color,
-        COUNT(*) total, COALESCE(SUM(t.is_done),0) done
+    task_status_schema_ready();
+    $score = task_score_sql('t');
+    $st = db()->prepare("SELECT COALESCE(s.name,t.title) name, COALESCE(s.color,\"#6b8872\") color,
+        COUNT(*) total, COALESCE(SUM($score),0) done
         FROM tasks t LEFT JOIN subjects s ON s.id=t.subject_id
-        WHERE t.student_id=? GROUP BY COALESCE(s.id,t.title) ORDER BY total DESC LIMIT 8');
+        WHERE t.student_id=? GROUP BY COALESCE(s.id,t.title) ORDER BY total DESC LIMIT 8");
     $st->execute([$studentId]);
     $rows = $st->fetchAll();
-    foreach ($rows as &$r) { $r['pct'] = (int)$r['total'] ? round($r['done']/$r['total']*100) : 0; }
+    foreach ($rows as &$r) { $r['pct'] = (int)$r['total'] ? round(((float)$r['done'])/(int)$r['total']*100) : 0; }
     return $rows;
 }
 
@@ -165,6 +303,17 @@ function conversation(int $a, int $b, int $limit = 200): array
     return $st->fetchAll();
 }
 
+function user_mood_schema_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) return $ready;
+    try {
+        $st = db()->query("SHOW COLUMNS FROM users LIKE 'mood_date'");
+        if (!$st->fetch()) db()->exec("ALTER TABLE users ADD COLUMN mood_date DATE DEFAULT NULL AFTER mood");
+        return $ready = true;
+    } catch (Throwable $e) { return $ready = false; }
+}
+
 /* ======================= mood ======================= */
 const MOODS = [
   'happy'    => ['emoji'=>'😄','label'=>'عالی','color'=>'#5fae7b'],
@@ -176,6 +325,18 @@ const MOODS = [
 function mood_info(?string $key): ?array
 {
     return $key && isset(MOODS[$key]) ? MOODS[$key] : null;
+}
+function current_mood_info(array $user): ?array
+{
+    user_mood_schema_ready();
+    $date = (string)($user['mood_date'] ?? '');
+    if ($date !== date('Y-m-d')) return null;
+    return mood_info($user['mood'] ?? null);
+}
+function current_mood_key(array $user): ?string
+{
+    user_mood_schema_ready();
+    return ((string)($user['mood_date'] ?? '') === date('Y-m-d')) ? ($user['mood'] ?? null) : null;
 }
 
 /* ======================= achievements ======================= */

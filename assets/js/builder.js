@@ -33,6 +33,7 @@
   const subjChips = document.getElementById('subjChips');
   const chapQuick = document.getElementById('chapQuick');
 
+  const CLIP_KEY = 'madar_planner_task_clipboard_v1';
   let copiedTask = null;     // payload currently on the clipboard
   let stickyPaste = false;   // true => keep pasting until stopped
   let draggedId = null;
@@ -147,12 +148,14 @@
   /* ---------------- copy / paste ---------------- */
   function clearCopyMode() {
     copiedTask = null; stickyPaste = false;
+    try { localStorage.removeItem(CLIP_KEY); } catch(_) {}
     document.body.classList.remove('copy-mode');
     if (copyHint) copyHint.style.display = 'none';
     document.querySelectorAll('.task-pill.copy-source').forEach(p=>p.classList.remove('copy-source'));
   }
   function setCopyMode(pill) {
     copiedTask = JSON.parse(pill.dataset.json);
+    try { localStorage.setItem(CLIP_KEY, JSON.stringify(copiedTask)); } catch(_) {}
     stickyPaste = (CFG.pasteMode === 'sticky');
     document.body.classList.add('copy-mode');
     if (copyHint) copyHint.style.display = 'inline-flex';
@@ -163,6 +166,19 @@
     pill.classList.add('copy-source');
     toast(stickyPaste ? 'کپی شد؛ چند خانه پشت‌سرهم پیست کنید' : 'کپی شد؛ خانه مقصد را بزنید', 'info', 2400);
   }
+
+  // نگه‌داری کلیپ‌بورد تسک بین هفته‌ها؛ می‌توان یک تسک را در هفته بعد پیست کرد.
+  try {
+    const saved = localStorage.getItem(CLIP_KEY);
+    if (saved) {
+      copiedTask = JSON.parse(saved);
+      stickyPaste = (CFG.pasteMode === 'sticky');
+      document.body.classList.add('copy-mode');
+      if (copyHint) copyHint.style.display = 'inline-flex';
+      if (copyHintText) copyHintText.textContent = 'تسک کپی‌شده آماده پیست است؛ خانه مقصد را بزنید (Esc = لغو)';
+    }
+  } catch(_) {}
+
 
   /* ---------------- subject helpers ---------------- */
   function currentSubjectId(){ return subjectInput.value || ''; }

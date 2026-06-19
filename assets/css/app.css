@@ -311,3 +311,6 @@ h1,h2,h3,h4 { line-height: 1.3; font-weight: 800; letter-spacing: -.01em; }
 /* tooltip */
 [data-tip]{position:relative}
 [data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);right:50%;transform:translateX(50%);background:var(--surface-3);color:var(--text);padding:5px 10px;border-radius:8px;font-size:.74rem;white-space:nowrap;box-shadow:var(--sh-sm);z-index:50;border:1px solid var(--border)}
+/* chosen madaar logo */
+.brand-logo-img,
+.brand img { border-radius:12px; object-fit:cover; box-shadow:0 8px 22px rgba(0,0,0,.18); }

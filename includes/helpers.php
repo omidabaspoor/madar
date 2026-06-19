@@ -12,6 +12,13 @@ if (!function_exists('mb_substr')) {
         return implode('', $slice);
     }
 }
+
+if (!function_exists('mb_strpos')) {
+    function mb_strpos($haystack, $needle, $offset = 0, $enc = 'UTF-8') {
+        return strpos((string)$haystack, (string)$needle, (int)$offset);
+    }
+}
+
 if (!function_exists('mb_strlen')) {
     function mb_strlen($str, $enc = 'UTF-8') {
         return count(preg_split('//u', (string)$str, -1, PREG_SPLIT_NO_EMPTY));

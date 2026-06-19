@@ -28,6 +28,7 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
             ['plans','برنامه‌ها','calendar','admin/plans.php'],
             ['exams','آزمون‌ها','clipboard','admin/exams.php'],
             ['reports','گزارش‌ها','chart','admin/reports.php'],
+            ['student_reports','گزارش حرفه‌ای','edit','admin/student_reports.php'],
             ['messages','پیام‌ها','message','admin/messages.php'],
         ],
         'other' => [
@@ -38,8 +39,10 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
         'main' => [
             ['dashboard','خانه','home','student/dashboard.php'],
             ['plan','برنامه','calendar','student/plan.php'],
+            ['reviews','مرورها','repeat','student/reviews.php'],
             ['exams','آزمون','clipboard','student/exams.php'],
             ['progress','گزارش','chart','student/progress.php'],
+            ['reports','گزارش‌دهی','edit','student/reports.php?type=weekly'],
             ['messages','پیام','message','student/messages.php'],
         ],
         'other' => [
@@ -80,6 +83,7 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
           <div class="rl"><?= $role==='admin' ? 'مشاور' : (e($u['field'] ?? 'دانش‌آموز')) ?></div>
         </div>
       </div>
+      <a href="<?= url('pwa_help.php') ?>" class="side-link" style="margin-top:6px;font-size:.82rem;color:var(--text-3)"><?= icon('phone',18) ?> <span>نصب وب‌اپ</span></a>
       <a href="<?= url('auth/logout.php') ?>" class="side-link" style="margin-top:6px;color:var(--danger)"><?= icon('logout',20) ?> <span>خروج</span></a>
     </div>
   </aside>

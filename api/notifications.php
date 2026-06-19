@@ -1,8 +1,10 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/review_scheduler.php';
 boot_session();
 require_login();
 $u = current_user();
+if (($u['role'] ?? '') === 'student') { review_due_notifications((int)$u['id']); }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['read'])) {
     require_csrf();

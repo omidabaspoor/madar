@@ -160,6 +160,24 @@ panel_start('تنظیمات', 'پیکربندی حساب و درس‌ها', 'adm
       </label>
     </div>
 
+
+
+    <div class="divider"></div>
+    <div class="settings-feature-grid">
+      <div class="feature-toggle-card">
+        <div><b><?= icon('sparkles',16) ?> تحلیل هوشمند مَدار</b><span>اگر خاموش شود، کارت و مودال تحلیل هوشمند در گزارش‌ها نمایش داده نمی‌شود.</span></div>
+        <label class="switch"><input type="checkbox" name="insight_enabled" value="1" <?= ($pset['insight_enabled']??'1')==='1'?'checked':'' ?>><span class="slider"></span></label>
+      </div>
+      <div class="feature-toggle-card">
+        <div><b><?= icon('repeat',16) ?> مرورهای فاصله‌دار</b><span>ساخت خودکار یادآور مرور برای مباحث خواندنی و حفظی.</span></div>
+        <label class="switch"><input type="checkbox" name="review_enabled" value="1" <?= ($pset['review_enabled']??'1')==='1'?'checked':'' ?>><span class="slider"></span></label>
+      </div>
+      <div class="feature-toggle-card">
+        <div><b><?= icon('bell',16) ?> پیشنهاد اعلان وب‌اپ</b><span>نمایش درخواست اجازه اعلان برای یادآوری مرورها روی گوشی/مرورگر.</span></div>
+        <label class="switch"><input type="checkbox" name="web_notifications" value="1" <?= ($pset['web_notifications']??'1')==='1'?'checked':'' ?>><span class="slider"></span></label>
+      </div>
+    </div>
+
     <button class="btn btn-gold mt-2"><?= icon('check',16) ?> ذخیره پیش‌فرض‌ها</button>
   </form>
 </div>
@@ -168,6 +186,7 @@ panel_start('تنظیمات', 'پیکربندی حساب و درس‌ها', 'adm
   .defaults-grid { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
   .settings-defaults .field label { display:flex; align-items:center; gap:6px; }
   .settings-defaults .hint { display:block; font-size:.74rem; color:var(--text-faint); margin-top:5px; line-height:1.6; }
+  .settings-feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}.feature-toggle-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border:1px solid var(--border-soft);border-radius:var(--r-md);background:var(--surface-2)}.feature-toggle-card b{display:flex;align-items:center;gap:6px}.feature-toggle-card span{display:block;color:var(--text-3);font-size:.76rem;line-height:1.6;margin-top:2px}
   .radio-cards { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .radio-card { display:flex; flex-direction:column; gap:4px; padding:13px 14px; border:1.5px solid var(--border); border-radius:var(--r-md); background:var(--surface); cursor:pointer; transition:.18s; }
   .radio-card input { position:absolute; opacity:0; }

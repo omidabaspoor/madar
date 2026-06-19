@@ -19,8 +19,9 @@ function page_head(string $title, string $desc = '', array $extraCss = []): void
   <meta property="og:title" content="<?= e($full) ?>">
   <meta property="og:description" content="<?= e($desc) ?>">
   <meta property="og:type" content="website">
-  <link rel="icon" href="<?= asset('img/logo.svg') ?>" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="<?= asset('icons/icon-192.png') ?>">
+  <link rel="icon" href="<?= url('favicon.ico') ?>" sizes="any">
+  <link rel="icon" href="<?= asset('icons/favicon-64.png') ?>" type="image/png" sizes="64x64">
+  <link rel="apple-touch-icon" href="<?= asset('icons/icon-180.png') ?>">
   <link rel="manifest" href="<?= url('manifest.php') ?>">
   <meta name="sw-url" content="<?= url('sw.js') ?>">
   <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
@@ -30,13 +31,14 @@ function page_head(string $title, string $desc = '', array $extraCss = []): void
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
   <meta name="csrf-token" content="<?= function_exists('csrf_token') ? e(csrf_token()) : '' ?>">
+  <script>window.MADAR_ICON='<?= asset('icons/icon-192.png') ?>';window.MADAR_BADGE='<?= asset('icons/favicon-64.png') ?>';</script>
 </head>
 <body><?php
 }
 
 function logo_svg(int $size = 38): string
 {
-    return '<img src="' . asset('img/logo.svg') . '" alt="' . e(APP_NAME) . '" width="' . $size . '" height="' . $size . '">';
+    return '<img class="brand-logo-img" src="' . asset('img/logo.png') . '" alt="' . e(APP_NAME) . '" width="' . $size . '" height="' . $size . '">';
 }
 
 function brand_block(): string

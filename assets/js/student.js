@@ -2,108 +2,141 @@
 (() => {
   'use strict';
   const faNum = (n)=>String(n).replace(/\d/g,d=>'۰۱۲۳۴۵۶۷۸۹'[d]);
-  let pendingRow = null; // row waiting for amount confirmation
+  const feelingTypes = ['study','review','textbook','reading','analysis','custom'];
+  let pendingRow = null;
+  let selectedFeeling = '';
 
-  /* ---- apply a toggle result to the row ---- */
+  function statusLabel(s){ return ({full:'اجرای کامل',partial:'اجرای ناقص',missed:'عدم اجرا',pending:'در انتظار'})[s]||s; }
+
   function applyResult(row, d) {
-    const cb = row.querySelector('[data-toggle-task]');
-    row.classList.toggle('done', d.is_done==1);
-    if (cb) cb.checked = d.is_done==1;
-    row.dataset.done = d.done_count;
-    // update visible progress text "x/y"
+    const status = d.status || (d.is_done==1 ? 'full' : 'pending');
+    row.dataset.status = status;
+    row.dataset.done = d.done_count || 0;
+    row.dataset.course = d.course_percent ?? '';
+    row.dataset.feeling = d.student_feeling || '';
+    row.classList.remove('done','partial','missed','pending');
+    row.classList.add(status === 'full' ? 'done' : status);
+    row.querySelectorAll('.task-action').forEach(b=>b.classList.toggle('active', b.dataset.statusAction===status));
     const prog = row.querySelector('.st-prog-count');
-    if (prog && d.target!=null) prog.textContent = faNum(d.done_count)+'/'+faNum(d.target)+' '+(prog.dataset.unit||'');
+    if (prog && d.target!=null) prog.textContent = faNum(d.done_count||0)+'/'+faNum(d.target)+' '+(prog.dataset.unit||'');
+    const course = row.querySelector('.st-course');
+    if (course) course.textContent = d.course_percent!==null && d.course_percent!==undefined ? faNum(d.course_percent)+'٪ کورس' : '';
+    const badge = row.querySelector('.st-status-text');
+    if (badge) badge.textContent = statusLabel(status);
     updateProgress();
   }
 
-  async function sendToggle(row, payload) {
-    row.style.opacity = '.5';
+  async function sendStatus(row, payload) {
+    row.style.opacity = '.55';
     try {
-      const d = await api(window.API_TASKS, { method:'POST', body: { action:'toggle', id: row.dataset.id, ...payload } });
+      const d = await api(window.API_TASKS, { method:'POST', body: { action:'set_status', id: row.dataset.id, ...payload } });
       row.style.opacity = '';
       applyResult(row, d);
-      if (d.is_done==1) { toast('آفرین! ادامه بده 💪','success',1800); confetti(); }
+      if (d.status==='full') { toast('عالی! کامل ثبت شد ✅','success',1800); confetti(); }
+      else if (d.status==='partial') toast('ثبت شد؛ ناقص هم نصف امتیاز دارد ●','info',1900);
+      else if (d.status==='missed') toast('عدم اجرا ثبت شد ✕','error',1700);
+      if (d.needs_report && d.report_url) {
+        setTimeout(()=>{ if(confirm('گزارش روزانه آماده است. الان تکمیلش می‌کنی؟')) location.href=d.report_url; }, 700);
+      }
       return d;
     } catch(err) {
       row.style.opacity='';
-      const cb = row.querySelector('[data-toggle-task]'); if (cb) cb.checked = row.classList.contains('done');
       toast(err.error||'خطا در ثبت','error');
     }
   }
 
-  /* ---- checkbox change ---- */
-  document.addEventListener('change', (e) => {
-    const cb = e.target.closest('[data-toggle-task]');
-    if (!cb) return;
-    const row = cb.closest('.s-task');
+  function openStatusModal(row, status){
+    pendingRow = row; selectedFeeling = row.dataset.feeling || '';
     const target = parseInt(row.dataset.target) || 0;
+    const title = row.querySelector('.st-title-main')?.textContent.trim() || row.querySelector('.st-title')?.textContent.trim() || 'تسک';
+    document.getElementById('smTaskId').value = row.dataset.id;
+    document.getElementById('smStatus').value = status;
+    document.getElementById('smTitle').textContent = title;
+    document.getElementById('smIcon').textContent = status==='full' ? '✓' : '●';
 
-    if (cb.checked) {
-      // checking = mark done. If it has a target, ask how many (optional), but completion is guaranteed.
-      if (target > 1) {
-        pendingRow = row;
-        const m = document.getElementById('amountModal');
-        document.getElementById('amTitle').textContent = row.querySelector('.st-title')?.textContent.trim() || 'تسک';
-        document.getElementById('amTarget').textContent = faNum(target);
-        const cur = parseInt(row.dataset.done) || target;
-        const inp = document.getElementById('amCount');
-        inp.max = target; inp.value = cur || target;
-        document.getElementById('amRange').max = target;
-        document.getElementById('amRange').value = cur || target;
-        cb.checked = false; // will be set true on confirm
-        openModal('amountModal');
-        setTimeout(()=>inp.focus(), 200);
-      } else {
-        sendToggle(row, { done: 1 });
-      }
+    const amountWrap = document.getElementById('smAmountWrap');
+    const count = document.getElementById('smCount');
+    const range = document.getElementById('smRange');
+    if (target > 0) {
+      amountWrap.style.display = '';
+      document.getElementById('smTargetText').textContent = 'از '+faNum(target)+' '+(row.dataset.targetUnit||'');
+      const currentDone = parseInt(row.dataset.done)||0;
+      const val = status==='full' ? Math.max(target, currentDone || target) : Math.max(1, currentDone || Math.ceil(target/2));
+      const softMax = Math.max(target * 3, val, target + 50);
+      count.removeAttribute('max'); range.max = softMax; count.value = val; range.value = Math.min(val, softMax);
     } else {
-      // unchecking = mark not done
-      sendToggle(row, { done: 0, done_count: 0 });
+      amountWrap.style.display = 'none'; count.value = status==='full' ? 1 : 0; range.value = count.value;
     }
+
+    const course = document.getElementById('smCourse');
+    const courseRange = document.getElementById('smCourseRange');
+    const cp = row.dataset.course ? parseInt(row.dataset.course) : (status==='full' ? 100 : 50);
+    course.value = cp; courseRange.value = cp;
+
+    const needsFeeling = feelingTypes.includes(row.dataset.type || '');
+    document.getElementById('smFeelingWrap').style.display = needsFeeling ? '' : 'none';
+    document.querySelectorAll('[data-feeling]').forEach(b=>b.classList.toggle('active', b.dataset.feeling===selectedFeeling));
+
+    openModal('taskStatusModal');
+    setTimeout(()=>course.focus(), 180);
+  }
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-status-action]');
+    if (!btn) return;
+    const row = btn.closest('.s-task');
+    const status = btn.dataset.statusAction;
+    if (status === 'missed') {
+      sendStatus(row, {status:'missed', done_count:0, course_percent:0});
+      return;
+    }
+    openStatusModal(row, status);
   });
 
-  /* ---- amount modal: sync range<->number ---- */
-  const amRange = document.getElementById('amRange');
-  const amCount = document.getElementById('amCount');
-  amRange?.addEventListener('input', ()=>{ amCount.value = amRange.value; });
-  amCount?.addEventListener('input', ()=>{ amRange.value = amCount.value; });
-
-  document.getElementById('amConfirm')?.addEventListener('click', async ()=>{
-    if (!pendingRow) return;
-    const val = Math.max(0, parseInt(amCount.value) || 0);
-    closeModal('amountModal');
-    await sendToggle(pendingRow, { done: 1, done_count: val });
-    pendingRow = null;
+  document.getElementById('smRange')?.addEventListener('input', e=>{ document.getElementById('smCount').value=e.target.value; });
+  document.getElementById('smCount')?.addEventListener('input', e=>{ const r=document.getElementById('smRange'); if(parseInt(e.target.value||0)>parseInt(r.max||0)) r.max=e.target.value; r.value=e.target.value; });
+  document.getElementById('smCourseRange')?.addEventListener('input', e=>{ document.getElementById('smCourse').value=e.target.value; });
+  document.getElementById('smCourse')?.addEventListener('input', e=>{ document.getElementById('smCourseRange').value=e.target.value; });
+  document.addEventListener('click', e=>{
+    const b=e.target.closest('[data-feeling]'); if(!b) return;
+    selectedFeeling=b.dataset.feeling;
+    document.querySelectorAll('[data-feeling]').forEach(x=>x.classList.toggle('active', x===b));
   });
-  document.getElementById('amFull')?.addEventListener('click', async ()=>{
+  document.getElementById('smConfirm')?.addEventListener('click', async ()=>{
     if (!pendingRow) return;
+    const status = document.getElementById('smStatus').value;
     const target = parseInt(pendingRow.dataset.target) || 0;
-    closeModal('amountModal');
-    await sendToggle(pendingRow, { done: 1, done_count: target });
+    const count = target > 0 ? document.getElementById('smCount').value : (status==='full'?1:0);
+    const course = document.getElementById('smCourse').value;
+    if (course === '' || parseInt(course)<0 || parseInt(course)>100) return toast('درصد کورس را بین ۰ تا ۱۰۰ وارد کن','error');
+    if (target > 0 && (count === '' || parseInt(count)<0)) return toast('تعداد انجام‌شده معتبر نیست','error');
+    if (feelingTypes.includes(pendingRow.dataset.type||'') && !selectedFeeling) return toast('حست را برای این تسک انتخاب کن','error');
+    closeModal('taskStatusModal');
+    await sendStatus(pendingRow, {status, done_count:count, course_percent:course, student_feeling:selectedFeeling});
     pendingRow = null;
   });
-  // if user closes modal without confirming, leave task unchecked
-  document.getElementById('amountModal')?.addEventListener('click', (e)=>{
-    if (e.target.classList.contains('modal-backdrop') || e.target.closest('[data-close]')) {
-      if (pendingRow) { const cb=pendingRow.querySelector('[data-toggle-task]'); if(cb) cb.checked = pendingRow.classList.contains('done'); }
-      pendingRow = null;
-    }
-  });
 
-  /* ---- recompute header progress ---- */
   function updateProgress() {
     const tasks = document.querySelectorAll('.s-task');
     if (!tasks.length) return;
-    const done = document.querySelectorAll('.s-task.done').length;
-    const pct = Math.round(done/tasks.length*100);
+    let score = 0;
+    tasks.forEach(t=>{
+      if(t.dataset.status==='partial') score += .5;
+      else if(t.dataset.status==='full') {
+        const target=parseInt(t.dataset.target)||0, done=parseInt(t.dataset.done)||0;
+        score += (target>0 && done>target) ? 1 + Math.min(.25, ((done-target)/target)*.25) : 1;
+      }
+    });
+    const pct = Math.round(score/tasks.length*100);
+    const full = document.querySelectorAll('.s-task[data-status="full"]').length;
+    const partial = document.querySelectorAll('.s-task[data-status="partial"]').length;
     const bar = document.querySelector('.greet-progress .progress > span');
     if (bar) { bar.style.width = pct+'%';
       const lbl = bar.closest('.greet-progress')?.querySelector('.between span:last-child');
-      if (lbl) lbl.textContent = faNum(pct)+'٪ · '+faNum(done)+'/'+faNum(tasks.length);
+      if (lbl) lbl.textContent = faNum(pct)+'٪ · کامل '+faNum(full)+' / ناقص '+faNum(partial);
     }
   }
 
-  /* ---- note modal ---- */
   document.addEventListener('click', (e) => {
     const nb = e.target.closest('[data-note]');
     if (!nb) return;
@@ -124,7 +157,6 @@
     } catch(e){ toast(e.error||'خطا','error'); }
   });
 
-  /* ---- mood ---- */
   document.getElementById('moodRow')?.addEventListener('click', async (e)=>{
     const b = e.target.closest('.mood-btn'); if(!b) return;
     document.querySelectorAll('.mood-btn').forEach(x=>x.classList.remove('active'));
@@ -133,19 +165,15 @@
     catch(e){}
   });
 
-  /* ---- day tabs (plan page) ---- */
   document.querySelectorAll('.day-tab').forEach(tab=>{
     tab.addEventListener('click', ()=>{
       document.querySelectorAll('.day-tab').forEach(t=>t.classList.remove('active'));
       tab.classList.add('active');
       const day = tab.dataset.day;
-      document.querySelectorAll('[data-day-panel]').forEach(p=>{
-        p.classList.toggle('hidden', p.dataset.dayPanel !== day);
-      });
+      document.querySelectorAll('[data-day-panel]').forEach(p=>p.classList.toggle('hidden', p.dataset.dayPanel !== day));
     });
   });
 
-  /* ---- tiny confetti ---- */
   function confetti(){
     const colors=['#cbac80','#6b8872','#e0c595','#8aa791'];
     for(let i=0;i<14;i++){

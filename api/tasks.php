@@ -5,6 +5,8 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/models.php';
+require_once __DIR__ . '/../includes/reporting.php';
+require_once __DIR__ . '/../includes/review_scheduler.php';
 boot_session();
 require_login();
 require_csrf();
@@ -18,6 +20,7 @@ $role = $u['role'];
 $json = str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') ? body_json() : [];
 $action = (string)(input('action') ?: ($json['action'] ?? ''));
 $in = array_merge($_POST, $json);
+task_status_schema_ready();
 
 /* ---- مجوز: مشاور صاحب برنامه؟ یا دانش‌آموز صاحب تسک؟ ---- */
 function plan_owned_by_advisor(int $planId, int $advisorId, string $role): bool {
@@ -55,7 +58,7 @@ function default_task_title(string $type, ?int $subjectId = null): string {
     }
     return TASK_TYPES[$type]['label'] ?? 'تسک';
 }
-function seed_special_tasks(int $planId, int $readingMin = 60, int $examMin = 50): int {
+function seed_special_tasks(int $planId, int $readingMin = 45, int $examMin = 50): int {
     $st = db()->prepare('SELECT * FROM plans WHERE id=? LIMIT 1');
     $st->execute([$planId]);
     $plan = $st->fetch();
@@ -67,15 +70,17 @@ function seed_special_tasks(int $planId, int $readingMin = 60, int $examMin = 50
     for ($day=0; $day<7; $day++) {
         $chk = db()->prepare('SELECT title, task_type FROM tasks WHERE plan_id=? AND day_index=? AND unit_index=8');
         $chk->execute([$planId,$day]);
-        $hasReading = false; $hasExam = false;
+        $hasReading = false; $hasExam = false; $hasReview = false;
         foreach ($chk->fetchAll() as $r) {
             if ($r['task_type']==='reading' || trim((string)$r['title'])==='روزخوانی') $hasReading = true;
             if ($r['task_type']==='exam' || trim((string)$r['title'])==='آزمونک') $hasExam = true;
+            if ($r['task_type']==='review' || trim((string)$r['title'])==='مرور ویژه') $hasReview = true;
         }
         $sortq = db()->prepare('SELECT COALESCE(MAX(sort_order),0)+1 FROM tasks WHERE plan_id=? AND day_index=? AND unit_index=8');
         $sortq->execute([$planId,$day]);
         $sort = (int)$sortq->fetchColumn();
         if (!$hasReading) { $ins->execute([$planId,$plan['student_id'],'روزخوانی','reading',$day,8,1,'ساعت',$readingMin,'normal',$sort++]); $added++; }
+        if (!$hasReview)  { $ins->execute([$planId,$plan['student_id'],'مرور ویژه','review',$day,8,15,'دقیقه',15,'normal',$sort++]); $added++; }
         if (!$hasExam)    { $ins->execute([$planId,$plan['student_id'],'آزمونک','exam',$day,8,50,'دقیقه',$examMin,'normal',$sort++]); $added++; }
     }
     return $added;
@@ -319,39 +324,68 @@ case 'seed_special': {
     json_out(['ok'=>true,'added'=>$added]);
 }
 
-/* ============ تکمیل تسک توسط دانش‌آموز ============ */
-case 'toggle': {
+/* ============ ثبت وضعیت سه‌حالته تسک توسط دانش‌آموز ============ */
+case 'toggle':
+case 'set_status': {
     if ($role!=='student') json_out(['ok'=>false,'error'=>'دسترسی ندارید'],403);
     $id=(int)($in['id']??0); $t=task_row($id);
     if (!$t || (int)$t['student_id']!==$me) json_out(['ok'=>false,'error'=>'تسک یافت نشد'],404);
     if ($t['plan_status']!=='published') json_out(['ok'=>false,'error'=>'این برنامه هنوز منتشر نشده'],403);
 
-    // مبنای تکمیل = خواست دانش‌آموز (تیک)، نه مقایسه با هدف.
-    // اگر done صریحاً ارسال شود همان ملاک است؛ وگرنه وضعیت فعلی برعکس می‌شود.
-    if (isset($in['done']) && $in['done'] !== '') {
-        $done = (int)((string)$in['done'] === '1' || $in['done'] === true || $in['done'] === 1);
-    } else {
-        $done = (int)($t['is_done']) ? 0 : 1;
+    $status = (string)($in['status'] ?? '');
+    if ($status === '') {
+        if (isset($in['done'])) $status = ((string)$in['done']==='1' || $in['done']===true || $in['done']===1) ? 'full' : 'pending';
+        else $status = task_status($t)==='full' ? 'pending' : 'full';
+    }
+    if (!in_array($status, ['pending','full','partial','missed'], true)) json_out(['ok'=>false,'error'=>'وضعیت نامعتبر است'],422);
+
+    $target = $t['target_count']!==null ? (int)$t['target_count'] : 0;
+    $doneCount = 0;
+    $coursePercent = null;
+    $feeling = null;
+
+    if ($status === 'full' || $status === 'partial') {
+        if (!isset($in['course_percent']) || $in['course_percent']==='') json_out(['ok'=>false,'error'=>'درصد پوشش/کورس را وارد کن'],422);
+        $coursePercent = clamp_int($in['course_percent'], 0, 100);
+        if ($target > 0) {
+            if (!isset($in['done_count']) || $in['done_count']==='') json_out(['ok'=>false,'error'=>'تعداد انجام‌شده را وارد کن'],422);
+            $doneCount = max(0, (int)$in['done_count']);
+        } else {
+            $doneCount = $status === 'full' ? 1 : 0;
+        }
+        if (is_feeling_task((string)$t['task_type'])) {
+            $feeling = (string)($in['student_feeling'] ?? '');
+            if ($feeling === '' || !isset(TASK_FEELINGS[$feeling])) json_out(['ok'=>false,'error'=>'حست نسبت به این تسک را انتخاب کن'],422);
+        }
+    } elseif ($status === 'missed') {
+        $doneCount = 0; $coursePercent = 0;
+    } else { // pending / reset
+        $doneCount = 0; $coursePercent = null;
     }
 
-    // مقدار انجام‌شده فقط برای آمار است و تأثیری در تکمیل ندارد
-    if (isset($in['done_count']) && $in['done_count']!=='') {
-        $doneCount = max(0,(int)$in['done_count']);
-        if ($t['target_count']!==null) $doneCount = min($doneCount, (int)$t['target_count']);
-    } else {
-        // اگر مقدار نفرستاد: تکمیل کامل=هدف، لغو=۰
-        $doneCount = $done ? ((int)($t['target_count'] ?? 0) ?: (int)$t['done_count'] ?: 1) : 0;
-    }
-
+    $isDone = $status === 'full' ? 1 : 0;
+    $completedAt = in_array($status, ['full','partial'], true) ? date('Y-m-d H:i:s') : null;
     $note = isset($in['student_note']) ? trim((string)$in['student_note']) : $t['student_note'];
-    $up=db()->prepare('UPDATE tasks SET is_done=?,done_count=?,student_note=?,completed_at=? WHERE id=?');
-    $up->execute([$done,$doneCount,$note ?: null,$done?date('Y-m-d H:i:s'):null,$id]);
-    if ($done) { touch_streak($me);
-        notify((int)$t['advisor_id'],'تسک تکمیل شد ✅', ($u['full_name'].' «'.$t['title'].'» را انجام داد.'),'check','admin/reports.php?student='.$me);
-        evaluate_achievements($me); // اعطای خودکار دستاوردهای واجد شرایط
+
+    $up=db()->prepare('UPDATE tasks SET completion_status=?, is_done=?, done_count=?, course_percent=?, student_feeling=?, student_note=?, completed_at=?, status_updated_at=? WHERE id=?');
+    $now = date('Y-m-d H:i:s');
+    $up->execute([$status,$isDone,$doneCount,$coursePercent,$feeling ?: null,$note ?: null,$completedAt,$now,$id]);
+
+    if (in_array($status, ['full','partial'], true)) { review_create_for_task($id); }
+    if ($status === 'full') {
+        touch_streak($me);
+        notify((int)$t['advisor_id'],'تسک کامل انجام شد ✅', ($u['full_name'].' «'.$t['title'].'» را کامل انجام داد.'),'check','admin/reports.php?student='.$me);
+        evaluate_achievements($me);
+    } elseif ($status === 'partial') {
+        notify((int)$t['advisor_id'],'تسک ناقص ثبت شد ●', ($u['full_name'].' «'.$t['title'].'» را ناقص انجام داد.'),'info','admin/reports.php?student='.$me);
+    } elseif ($status === 'missed') {
+        notify((int)$t['advisor_id'],'تسک قرمز شد ✕', ($u['full_name'].' «'.$t['title'].'» را انجام نداده ثبت کرد.'),'warning','admin/reports.php?student='.$me);
     }
     $week = student_week_stats($me);
-    json_out(['ok'=>true,'is_done'=>$done,'done_count'=>$doneCount,'target'=>$t['target_count']!==null?(int)$t['target_count']:null,'week'=>$week,'streak'=>get_user($me)['streak']]);
+    $needsReport = report_due_daily_after_tasks($me);
+    json_out(['ok'=>true,'status'=>$status,'is_done'=>$isDone,'done_count'=>$doneCount,'course_percent'=>$coursePercent,
+        'student_feeling'=>$feeling,'target'=>$target?:null,'week'=>$week,'streak'=>get_user($me)['streak'],
+        'needs_report'=>$needsReport,'report_url'=>$needsReport?url('student/reports.php?type=daily&date='.date('Y-m-d')):null]);
 }
 
 /* ============ یادداشت دانش‌آموز ============ */
@@ -391,6 +425,8 @@ function render_task(array $t): array {
         'target_count'=>$t['target_count']!==null?(int)$t['target_count']:null,'target_unit'=>$t['target_unit'],
         'duration_min'=>$t['duration_min']!==null?(int)$t['duration_min']:null,'priority'=>$t['priority'],
         'is_done'=>(int)$t['is_done'],'done_count'=>(int)$t['done_count'],
+        'completion_status'=>task_status($t),'course_percent'=>$t['course_percent']!==null?(int)$t['course_percent']:null,
+        'student_feeling'=>$t['student_feeling']??null,
         'subject_id'=>$t['subject_id']!==null?(int)$t['subject_id']:null,
     ];
 }

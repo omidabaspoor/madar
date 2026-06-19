@@ -4,7 +4,8 @@ require_once __DIR__ . '/../includes/models.php';
 require_once __DIR__ . '/../includes/panel_layout.php';
 boot_session();
 require_role('advisor','admin');
-$u = current_user();
+user_mood_schema_ready();
+$u = get_user((int)current_user()['id']);
 
 $status = in_array($_GET['status'] ?? '', ['active','pending','suspended'], true) ? $_GET['status'] : null;
 $q = trim((string)($_GET['q'] ?? ''));
@@ -50,7 +51,7 @@ panel_start('دانش‌آموزان', fa_num(count($students)) . ' دانش‌�
       <?php if($s['field']):?><span class="badge"><?= e($s['field']) ?></span><?php endif;?>
       <?php if($s['grade']):?><span class="badge"><?= e($s['grade']) ?></span><?php endif;?>
       <span class="badge"><?= icon('fire',12) ?> <?= fa_num($s['streak']) ?></span>
-      <?php $m = mood_info($s['mood'] ?? null); if($m): ?>
+      <?php $m = current_mood_info($s); if($m): ?>
       <span class="badge" style="border-color:<?= e($m['color']) ?>55"><?= $m['emoji'] ?> <?= e($m['label']) ?></span>
       <?php endif; ?>
     </div>

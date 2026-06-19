@@ -9,7 +9,7 @@ declare(strict_types=1);
 // --- محیط ---
 define('APP_ENV', 'production');          // production | development
 define('APP_NAME', 'مَدار');
-define('APP_NAME_EN', 'Madar');
+define('APP_NAME_EN', 'madaar');
 define('APP_TAGLINE', 'سامانه هوشمند برنامه‌ریزی کنکور');
 define('APP_OWNER', 'دکتر سجاد صیادی');
 define('APP_OWNER_EN', 'Dr. Sajjad Sayyadi');
