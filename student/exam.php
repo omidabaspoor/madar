@@ -44,11 +44,17 @@ foreach ($answers as $qid=>$a) {
 
 $mode = $exam['creation_mode'] ?? 'quick_sheet';
 
-// استخراج صفحات چندتایی آپلودشده
+// استخراج صفحات/فایل‌های دفترچه (عکس یا PDF)
 $sheetArr = $exam['sheet_paths_json'] ? (json_decode($exam['sheet_paths_json'], true) ?: []) : [];
 if (!empty($exam['sheet_path']) && !in_array($exam['sheet_path'], $sheetArr, true)) {
     array_unshift($sheetArr, $exam['sheet_path']);
 }
+$sheetItems = array_values(array_map(fn($p)=>[
+    'rel'=>(string)$p,
+    'url'=>sheet_view_url((string)$p, $examId),
+    'type'=>sheet_asset_type((string)$p),
+], $sheetArr));
+$firstSheet = $sheetItems[0] ?? ['rel'=>'','url'=>'','type'=>'image'];
 
 page_head('آزمون: ' . $exam['title'], '', ['exam.css']);
 ?>
@@ -82,33 +88,46 @@ page_head('آزمون: ' . $exam['title'], '', ['exam.css']);
       <section class="booklet-viewer-panel panel flex" style="flex-direction:column;padding:0;background:var(--surface-1);border:1px solid var(--border-soft);border-radius:var(--r-lg);overflow:hidden;position:relative;transition:all 0.2s">
         <div class="booklet-toolbar between panel-head wrap gap-2" style="padding:10px 16px;background:var(--surface-2);border-bottom:1px solid var(--border-soft);margin:0;align-items:center">
           <div class="flex gap-2" style="align-items:center">
-            <span class="badge badge-gold flex gap-1" style="align-items:center;font-weight:900;font-size:.85rem" id="bookletTitleBadge"><?= icon('image',16) ?> دفترچه‌ی سوالات (ص ۱ از <?= count($sheetArr) ?>)</span>
-            <span class="muted" style="font-size:.78rem">با موس/انگشت بکشید</span>
+            <span class="badge badge-gold flex gap-1" style="align-items:center;font-weight:900;font-size:.85rem" id="bookletTitleBadge"><?= icon($firstSheet['type']==='pdf'?'paperclip':'image',16) ?> دفترچه‌ی سوالات (ص ۱ از <?= count($sheetItems) ?>)</span>
+            <span class="muted" id="bookletHint" style="font-size:.78rem"><?= $firstSheet['type']==='pdf'?'PDF داخل همین باکس نمایش داده می‌شود':'با موس/انگشت بکشید' ?></span>
           </div>
 
-          <!-- ناوبری صفحات چندتایی -->
-          <?php if(count($sheetArr) > 1): ?>
+          <!-- ناوبری صفحات/فایل‌های چندتایی -->
+          <?php if(count($sheetItems) > 1): ?>
             <div class="flex gap-1 booklet-pages-nav" style="align-items:center;background:var(--surface-1);padding:2px 6px;border-radius:6px;direction:ltr">
               <button type="button" class="btn btn-ghost btn-sm" id="prevSheetPageBtn" title="صفحه قبل" style="padding:0 8px;font-weight:bold" disabled>◀ قبلی</button>
               <select id="sheetPageSelect" class="select" style="margin:0;height:28px;padding:0 10px;font-size:.85rem;font-weight:bold;width:auto">
-                <?php foreach($sheetArr as $si => $sPath): ?>
-                  <option value="<?= (int)$si ?>" data-src="<?= url($sPath) ?>">ص <?= $si+1 ?></option>
+                <?php foreach($sheetItems as $si => $item): ?>
+                  <option value="<?= (int)$si ?>" data-src="<?= e($item['url']) ?>" data-type="<?= e($item['type']) ?>">ص <?= $si+1 ?><?= $item['type']==='pdf'?' · PDF':'' ?></option>
                 <?php endforeach; ?>
               </select>
               <button type="button" class="btn btn-ghost btn-sm" id="nextSheetPageBtn" title="صفحه بعد" style="padding:0 8px;font-weight:bold">بعدی ▶</button>
             </div>
           <?php endif; ?>
 
-          <div class="flex gap-1" style="align-items:center;direction:ltr;background:var(--surface-1);padding:2px 8px;border-radius:6px">
-            <button type="button" class="btn btn-ghost btn-sm" id="zoomOutBtn" title="کوچک‌نمایی (یا چرخش موس با Ctrl)" style="font-weight:900;font-size:1.2rem;width:28px;height:28px;padding:0">-</button>
+          <div class="flex gap-1" id="imageZoomControls" style="align-items:center;direction:ltr;background:var(--surface-1);padding:2px 8px;border-radius:6px">
+            <button type="button" class="btn btn-ghost btn-sm" id="zoomOutBtn" title="کوچک‌نمایی" style="font-weight:900;font-size:1.2rem;width:28px;height:28px;padding:0">-</button>
             <span id="zoomLevelText" style="font-family:monospace;font-size:.85rem;font-weight:bold;width:44px;text-align:center;color:var(--text-1)">100%</span>
             <button type="button" class="btn btn-ghost btn-sm" id="zoomInBtn" title="بزرگ‌نمایی" style="font-weight:900;font-size:1.2rem;width:28px;height:28px;padding:0">+</button>
             <button type="button" class="btn btn-ghost btn-sm" id="zoomResetBtn" title="اندازه اصلی" style="font-weight:900;font-size:1.1rem;width:28px;height:28px;padding:0;color:var(--gold)">↺</button>
           </div>
+          <div class="flex gap-1 <?= $firstSheet['type']==='pdf'?'':'hidden' ?>" id="pdfPageControls" style="align-items:center;direction:ltr;background:var(--surface-1);padding:2px 8px;border-radius:6px">
+            <button type="button" class="btn btn-ghost btn-sm" id="pdfPrevPage" style="padding:0 8px;font-weight:bold">◀</button>
+            <span id="pdfPageText" style="font-family:monospace;font-size:.82rem;font-weight:900;min-width:62px;text-align:center;color:var(--text-1)">1/1</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="pdfNextPage" style="padding:0 8px;font-weight:bold">▶</button>
+          </div>
         </div>
         
-        <div class="booklet-scroll-area" id="bookletScrollArea" style="flex:1;overflow:hidden;padding:24px;background:#060a08;position:relative;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:center">
-          <img id="bookletImg" src="<?= url($sheetArr[0] ?? '') ?>" alt="Exam Booklet Sheet" style="max-width:none;max-height:none;transition:transform 0.08s ease;border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,0.8);position:absolute;transform:translate(0px, 0px) scale(1)">
+        <div class="booklet-scroll-area <?= $firstSheet['type']==='pdf'?'pdf-mode':'' ?>" id="bookletScrollArea" data-type="<?= e($firstSheet['type']) ?>" style="flex:1;overflow:hidden;padding:24px;background:#060a08;position:relative;cursor:grab;user-select:none;display:flex;align-items:center;justify-content:center">
+          <img id="bookletImg" class="<?= $firstSheet['type']==='pdf'?'hidden':'' ?>" src="<?= $firstSheet['type']==='image' ? e($firstSheet['url']) : '' ?>" alt="Exam Booklet Sheet" style="max-width:none;max-height:none;transition:transform 0.08s ease;border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,0.8);position:absolute;transform:translate(0px, 0px) scale(1)">
+          <div id="bookletPdf" class="booklet-pdf-canvas-wrap <?= $firstSheet['type']==='pdf'?'':'hidden' ?>" data-src="<?= $firstSheet['type']==='pdf' ? e($firstSheet['url']) : '' ?>">
+            <canvas id="bookletPdfCanvas"></canvas>
+            <div class="pdf-page-loading hidden" id="pdfPageLoading"><span class="spinner"></span> در حال آماده‌سازی PDF…</div>
+          </div>
+          <div id="bookletPdfFallback" class="booklet-pdf-fallback hidden">
+            <b>PDF داخل مرورگر آماده نشد.</b>
+            <button type="button" id="bookletPdfRetry" class="btn btn-gold btn-sm">تلاش دوباره</button>
+          </div>
         </div>
       </section>
 
@@ -273,5 +292,7 @@ page_head('آزمون: ' . $exam['title'], '', ['exam.css']);
   window.API_EXAM_TAKE = '<?= url('api/exam_take.php') ?>';
   window.EXAM_INIT     = <?= json_encode($initAnswers, JSON_UNESCAPED_UNICODE) ?: '{}' ?>;
   window.EXAM_ID_PARAM = <?= (int)$examId ?>;
+  window.PDFJS_URL     = '<?= asset('js/vendor/pdf.min.mjs') ?>';
+  window.PDFJS_WORKER  = '<?= asset('js/vendor/pdf.worker.min.mjs') ?>';
 </script>
 <?php page_foot(['exam_take.js']); ?>

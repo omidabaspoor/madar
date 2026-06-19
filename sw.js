@@ -1,5 +1,5 @@
 /* مَدار Service Worker — network-first برای CSS/JS و صفحات، cache-first برای عکس/فونت */
-const VERSION = 'madar-v3';
+const VERSION = 'madar-v4';
 const STATIC_CACHE = 'static-' + VERSION;
 const PAGE_CACHE = 'pages-' + VERSION;
 
@@ -37,6 +37,12 @@ self.addEventListener('fetch', (e) => {
   // درخواست‌های API: همیشه شبکه
   if (url.pathname.includes('/api/')) {
     e.respondWith(fetch(req).catch(()=>new Response(JSON.stringify({ok:false,error:'آفلاین'}),{headers:{'Content-Type':'application/json'}})));
+    return;
+  }
+
+  // PDFهای بزرگ دفترچه و Range requestهای مرورگر PDF Viewer نباید وارد Cache API شوند.
+  if (req.headers.has('range') || /\.pdf$/i.test(url.pathname)) {
+    e.respondWith(fetch(req));
     return;
   }
 
