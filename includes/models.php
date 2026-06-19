@@ -589,13 +589,15 @@ function chapters_table_ready(): bool {
 /** نگاشت نام درس دیتابیس به کلید فصل‌ها */
 function normalize_subject_for_chapters(string $name): ?string {
     $n = trim($name);
+    // ترتیب مهم است: «فیزیک (۱) ریاضی» نباید ریاضی تشخیص داده شود،
+    // و «ریاضی (۱) — به‌جای حسابان در دهم» نباید حسابان تشخیص داده شود.
     if (mb_strpos($n, 'زیست') !== false) return 'زیست‌شناسی';
-    if (mb_strpos($n, 'حسابان') !== false) return 'حسابان';
-    if (mb_strpos($n, 'هندسه') !== false) return 'هندسه';
-    if (mb_strpos($n, 'گسسته') !== false) return 'ریاضیات گسسته';
-    if (mb_strpos($n, 'ریاضی') !== false) return 'ریاضی';
-    if (mb_strpos($n, 'شیمی') !== false) return 'شیمی';
     if (mb_strpos($n, 'فیزیک') !== false) return 'فیزیک';
+    if (mb_strpos($n, 'شیمی') !== false) return 'شیمی';
+    if (mb_strpos($n, 'گسسته') !== false) return 'ریاضیات گسسته';
+    if (mb_strpos($n, 'هندسه') !== false) return 'هندسه';
+    if (mb_strpos($n, 'ریاضی') === 0 || mb_strpos($n, 'ریاضی') !== false) return 'ریاضی';
+    if (mb_strpos($n, 'حسابان') !== false) return 'حسابان';
     if (mb_strpos($n, 'عربی') !== false) return 'عربی، زبان قرآن';
     if (mb_strpos($n, 'دین') !== false || mb_strpos($n, 'دینی') !== false) return 'دین و زندگی';
     if (mb_strpos($n, 'ادبیات') !== false || mb_strpos($n, 'فارسی') !== false) return 'فارسی';
@@ -622,17 +624,31 @@ function student_grade_number(string $grade): int {
     return 12;
 }
 
-/** گرفتن فصل‌ها بر اساس درس، رشته و پایه دانش‌آموز */
+/** آیا درس از عمومی‌هاست و باید مستقل از رشته دانش‌آموز از field=omumi خوانده شود؟ */
+function is_common_chapter_subject(string $subjectKey): bool {
+    return in_array($subjectKey, [
+        'عربی، زبان قرآن', 'دین و زندگی', 'فارسی', 'زبان انگلیسی', 'هویت اجتماعی', 'سلامت و بهداشت'
+    ], true);
+}
+
+/** گرفتن فصل‌ها بر اساس درس و رشته دانش‌آموز (عمومی‌ها برای همه رشته‌ها از omumi خوانده می‌شوند) */
 function chapters_for_subject(string $subjectName, string $studentField): array {
     if (!chapters_table_ready()) return [];
     $key = normalize_subject_for_chapters($subjectName);
     if (!$key) return [];
-    $field = student_field_key($studentField);
 
-    $sql = 'SELECT * FROM chapters WHERE subject_name=? AND field=? AND is_active=1 ORDER BY grade, sort_order';
+    $field = is_common_chapter_subject($key) ? 'omumi' : student_field_key($studentField);
+
+    $sql = 'SELECT * FROM chapters WHERE subject_name=? AND field=? AND is_active=1 ORDER BY grade, book_name, sort_order';
     $st = db()->prepare($sql);
     $st->execute([$key, $field]);
     $rows = $st->fetchAll();
+
+    // اگر برای رشته اختصاصی ردیفی نبود، یک fallback به عمومی داشته باشیم تا پنل خالی نماند.
+    if (!$rows && $field !== 'omumi') {
+        $st->execute([$key, 'omumi']);
+        $rows = $st->fetchAll();
+    }
 
     $out = [];
     foreach ($rows as $r) {
