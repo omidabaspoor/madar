@@ -245,8 +245,12 @@ function render_result(array $rep, bool $showAnswers = true): void
         <summary style="font-weight:900;cursor:pointer;color:var(--gold-light);font-size:1rem;display:flex;align-items:center;gap:10px">
           <?= icon('image',20) ?> مشاهده‌ی دفترچه‌ی اصلی سوالات آزمون (جهت تطبیق چشمی سوال با کلید و آسیب‌شناسی)
         </summary>
-        <div class="mt-3 text-c" style="overflow:auto;max-height:500px;background:#060a08;padding:20px;border-radius:12px;border:1px solid var(--border-soft)">
-          <img src="<?= url($sheetPath) ?>" alt="Original Question Booklet Sheet" style="max-width:100%;height:auto;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.6)">
+        <div class="mt-3 text-c" style="overflow:auto;height:min(72vh,720px);background:#060a08;padding:<?= sheet_asset_type($sheetPath)==='pdf'?'0':'20px' ?>;border-radius:12px;border:1px solid var(--border-soft)">
+          <?php if(sheet_asset_type($sheetPath)==='pdf'): ?>
+            <div class="empty-state" style="height:100%;display:grid;place-items:center;color:var(--text-2)">دفترچه PDF فقط داخل محیط آزمون، بدون امکان دانلود مستقیم نمایش داده می‌شود.</div>
+          <?php else: ?>
+            <img src="<?= url($sheetPath) ?>" alt="Original Question Booklet Sheet" style="max-width:100%;height:auto;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.6)">
+          <?php endif; ?>
         </div>
       </details>
     <?php endif; ?>
@@ -282,7 +286,11 @@ function render_result(array $rep, bool $showAnswers = true): void
 
             <?php if($q['q_image']): ?>
               <div class="eq-image mb-4 text-c" style="background:#060a08;padding:12px;border-radius:12px;border:1px solid var(--border-soft)">
-                <img src="<?= url($q['q_image']) ?>" alt="" loading="lazy" style="max-height:240px;width:auto;max-width:100%;border-radius:8px">
+                <?php if(sheet_asset_type($q['q_image'])==='pdf'): ?>
+                  <span class="badge badge-gold">PDF سوال فقط در محیط آزمون نمایش داده می‌شود</span>
+                <?php else: ?>
+                  <img src="<?= url($q['q_image']) ?>" alt="" loading="lazy" style="max-height:240px;width:auto;max-width:100%;border-radius:8px">
+                <?php endif; ?>
               </div>
             <?php endif; ?>
 

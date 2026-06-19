@@ -445,8 +445,10 @@ function student_exams(int $studentId): array {
         (SELECT COUNT(*) FROM exam_questions q WHERE q.exam_id=e.id) AS q_count,
         a.id AS attempt_id, a.status AS attempt_status, a.total_score
         FROM exams e
-        LEFT JOIN exam_attempts a ON a.exam_id=e.id AND a.student_id=?
+        JOIN users su ON su.id=?
+        LEFT JOIN exam_attempts a ON a.exam_id=e.id AND a.student_id=su.id
         WHERE e.status='published'
+          AND (su.advisor_id IS NULL OR e.advisor_id=su.advisor_id OR e.advisor_id IN (SELECT id FROM users WHERE role='admin'))
         ORDER BY e.created_at DESC";
     $st = db()->prepare($sql);
     $st->execute([$studentId]);
@@ -463,6 +465,12 @@ function get_or_create_attempt(int $examId, int $studentId): array {
     $deadline = null;
     if ($exam['timing_mode'] === 'total' && $exam['duration_min']) {
         $deadline = date('Y-m-d H:i:s', time() + (int)$exam['duration_min']*60);
+    } elseif ($exam['timing_mode'] === 'per_section') {
+        $secs = exam_sections($examId);
+        $mins = 0;
+        foreach ($secs as $sec) $mins += (int)($sec['duration_min'] ?? 0);
+        if ($mins <= 0) $mins = (int)($exam['duration_min'] ?? 60);
+        $deadline = date('Y-m-d H:i:s', time() + max(1, $mins)*60);
     }
     $ins = db()->prepare('INSERT INTO exam_attempts (exam_id,student_id,deadline_at) VALUES (?,?,?)');
     $ins->execute([$examId, $studentId, $deadline]);

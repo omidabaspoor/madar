@@ -52,6 +52,20 @@ $results = exam_results($examId);
 $qCount = exam_question_count($examId);
 $avg = $results ? round(array_sum(array_map(fn($r)=>(float)$r['total_score'],$results))/count($results),1) : 0;
 
+// کنترل کامل مشاور روی شرکت دانش‌آموزها: وضعیت همه‌ی دانش‌آموزان + ریست آزمون‌های ناتمام/ثبت‌شده
+if ($u['role'] === 'admin') {
+    $ctrl = db()->prepare('SELECT s.id,s.full_name,s.field,s.status,a.id attempt_id,a.status attempt_status,a.started_at,a.submitted_at,a.total_score
+        FROM users s LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=?
+        WHERE s.role="student" AND s.status="active" ORDER BY s.full_name');
+    $ctrl->execute([$examId]);
+} else {
+    $ctrl = db()->prepare('SELECT s.id,s.full_name,s.field,s.status,a.id attempt_id,a.status attempt_status,a.started_at,a.submitted_at,a.total_score
+        FROM users s LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=?
+        WHERE s.role="student" AND s.status="active" AND s.advisor_id=? ORDER BY s.full_name');
+    $ctrl->execute([$examId, (int)$u['id']]);
+}
+$controlRows = $ctrl->fetchAll();
+
 panel_start('نتایج و رتبه‌بندی آزمون', $exam['title'], 'admin', 'exams', ['student.css','result.css']);
 ?>
 <div class="mb-4 flex gap-2 wrap between" style="align-items:center">
@@ -59,7 +73,7 @@ panel_start('نتایج و رتبه‌بندی آزمون', $exam['title'], 'adm
     <a href="<?= url('admin/exams.php') ?>" class="btn btn-ghost btn-sm flex gap-1" style="align-items:center"><?= icon('arrow-right',16) ?> آزمون‌ها</a>
     <a href="<?= url('admin/exam_builder.php?id='.$examId) ?>" class="btn btn-ghost btn-sm flex gap-1" style="align-items:center"><?= icon('edit',15) ?> ویرایش آزمون</a>
   </div>
-  <span class="badge badge-sage" style="padding:6px 14px;font-weight:900 flex gap-1" style="align-items:center">✓ امکان صدور مجوز شرکت مجدد فعال است</span>
+  <span class="badge badge-sage" style="padding:6px 14px;font-weight:900;display:inline-flex;align-items:center">✓ امکان صدور مجوز شرکت مجدد فعال است</span>
 </div>
 
 <div class="stat-cards mb-4">
@@ -67,6 +81,41 @@ panel_start('نتایج و رتبه‌بندی آزمون', $exam['title'], 'adm
   <div class="panel stat reveal in" data-d="1" style="background:var(--surface-2);border:1px solid var(--border-soft)"><span class="icon-tile"><?= icon('target',24) ?></span><div><div class="v"><?= fa_num($avg) ?>٪</div><div class="k">میانگین درصد</div></div></div>
   <div class="panel stat reveal in" data-d="2" style="background:var(--surface-2);border:1px solid var(--border-soft)"><span class="icon-tile sage"><?= icon('list',24) ?></span><div><div class="v"><?= fa_num($qCount) ?></div><div class="k">تعداد سوال</div></div></div>
   <div class="panel stat reveal in" data-d="3" style="background:var(--surface-2);border:1px solid var(--border-soft)"><span class="icon-tile" style="background:rgba(217,178,95,.14);color:var(--warn)"><?= icon('trophy',24) ?></span><div><div class="v"><?= $results?fa_num(round((float)$results[0]['total_score'])).'٪':'—' ?></div><div class="k">بالاترین درصد</div></div></div>
+</div>
+
+<div class="panel reveal in mb-4 exam-control-panel" style="background:linear-gradient(135deg,rgba(203,172,128,.08),var(--surface-1));border:1px solid rgba(203,172,128,.20);padding:24px;border-radius:var(--r-lg);overflow-x:auto">
+  <div class="panel-head mb-4">
+    <h3><?= icon('settings',22) ?> کنترل شرکت دانش‌آموزها</h3>
+    <span class="badge badge-gold">ریست آزمون = حذف پاسخ‌برگ فعلی و امکان شروع دوباره</span>
+  </div>
+  <?php if(!$controlRows): ?>
+    <div class="empty-state">دانش‌آموز فعالی برای این مشاور یافت نشد.</div>
+  <?php else: ?>
+  <table class="tbl" style="width:100%;border-collapse:collapse;text-align:right">
+    <thead><tr><th>دانش‌آموز</th><th>وضعیت آزمون</th><th>زمان شروع/ثبت</th><th>نمره</th><th>کنترل</th></tr></thead>
+    <tbody>
+    <?php foreach($controlRows as $cr):
+      $attStatus = $cr['attempt_status'] ?: 'not_started';
+      $badgeCls = ['submitted'=>'badge-sage','in_progress'=>'badge-gold','not_started'=>'badge'][$attStatus] ?? 'badge';
+      $label = ['submitted'=>'ثبت‌شده','in_progress'=>'ناتمام / در حال انجام','not_started'=>'شروع نکرده'][$attStatus] ?? $attStatus;
+    ?>
+      <tr>
+        <td><div class="u-row"><span class="u-ava" style="width:34px;height:34px"><?= e(avatar_letters($cr['full_name'])) ?></span><b><?= e($cr['full_name']) ?></b><?= $cr['field']?'<span class="badge">'.e($cr['field']).'</span>':'' ?></div></td>
+        <td><span class="badge <?= $badgeCls ?>"><?= e($label) ?></span></td>
+        <td class="muted" style="font-size:.82rem"><?= $cr['started_at']?jalali_date($cr['started_at'],true):'—' ?><?= $cr['submitted_at']?' · ثبت: '.jalali_date($cr['submitted_at'],true):'' ?></td>
+        <td><?= $cr['total_score']!==null?fa_num(round((float)$cr['total_score'])).'٪':'—' ?></td>
+        <td>
+          <?php if($cr['attempt_id']): ?>
+            <button type="button" class="btn btn-gold btn-sm reset-att-list-btn" data-att="<?= (int)$cr['attempt_id'] ?>" data-exam="<?= (int)$examId ?>">🔄 اجازه شرکت مجدد</button>
+          <?php else: ?>
+            <span class="muted" style="font-size:.82rem">نیازی به ریست نیست</span>
+          <?php endif; ?>
+        </td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php endif; ?>
 </div>
 
 <div class="panel reveal in" data-d="2" style="background:var(--surface-1);border:1px solid var(--border-soft);padding:24px;border-radius:var(--r-lg);overflow-x:auto">

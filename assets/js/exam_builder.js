@@ -21,8 +21,11 @@
     plus:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
     book:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/></svg>'};
 
-  const setStatus=(s,t)=>{ status.className='save-status '+s;
-    status.innerHTML=(s==='saving'?'<span class="spinner" style="width:14px;height:14px"></span>':ICO.check)+' '+t; };
+  const setStatus=(s,t)=>{
+    if (!status) return;
+    status.className='save-status '+s;
+    status.innerHTML=(s==='saving'?'<span class="spinner" style="width:14px;height:14px"></span>':ICO.check)+' '+t;
+  };
 
   function grow(el){ el.style.height='auto'; el.style.height=el.scrollHeight+'px'; }
   document.querySelectorAll('.q-text').forEach(grow);
@@ -43,6 +46,8 @@
 
   document.querySelectorAll('.mode-card').forEach(card => {
     card.addEventListener('click', () => {
+      const inp = card.querySelector('input[name="creation_mode"]');
+      if (inp) inp.checked = true;
       document.querySelectorAll('.mode-card').forEach(c => {
         c.classList.remove('active');
         c.style.borderColor = 'var(--border-soft)';
@@ -65,6 +70,15 @@
     });
   }
   syncStudioSuites();
+
+  function updateUrl(step = root.dataset.step || '1') {
+    if (!examId) return;
+    const u = new URL(location.href);
+    u.searchParams.set('id', String(examId));
+    u.searchParams.set('step', String(step));
+    u.searchParams.set('mode', root.dataset.mode || creationMode() || 'quick_sheet');
+    history.replaceState(null, '', u.pathname + u.search + u.hash);
+  }
 
   function examType(){ return document.querySelector('input[name="exam_type"]:checked')?.value || 'single'; }
 
@@ -90,9 +104,8 @@
     setStatus('saving','در حال ذخیره…');
     try{
       const d=await api(API,{method:'POST',body:metaPayload()});
-      if(!examId && d.id){ examId=d.id; root.dataset.exam=d.id;
-        history.replaceState(null,'',location.pathname+'?id='+examId);
-      }
+      if(!examId && d.id){ examId=d.id; root.dataset.exam=d.id; }
+      updateUrl(root.dataset.step || '1');
       metaDirty=false; setStatus('saved','ذخیره شد');
       return true;
     }catch(e){ setStatus('saved','آماده'); return false; }
@@ -103,6 +116,7 @@
     root.dataset.step=n;
     document.querySelectorAll('.builder-step').forEach(s=>s.classList.toggle('hidden', s.dataset.step!=String(n)));
     document.querySelectorAll('.stepper .step').forEach(b => b.classList.toggle('active', b.dataset.stepTo==String(n)));
+    updateUrl(n);
     window.scrollTo({top:0,behavior:'smooth'});
   }
 
@@ -125,23 +139,70 @@
   const sheetInput  = document.getElementById('examSheetInput');
   const thumbsGrid  = document.getElementById('uploadedSheetsThumbsGrid');
 
+  function uploadFormData(url, fd, onProgress){
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url, true);
+      if (window.MADAR?.csrf) xhr.setRequestHeader('X-CSRF-Token', window.MADAR.csrf);
+      xhr.responseType = 'text';
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable && onProgress) onProgress(Math.round(ev.loaded / ev.total * 100));
+      };
+      xhr.onload = () => {
+        let data = null;
+        try { data = JSON.parse(xhr.responseText || '{}'); } catch(_) { data = {ok:false,error:'پاسخ نامعتبر از سرور'}; }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+        else reject(data || {ok:false,error:'خطای آپلود ('+xhr.status+')'});
+      };
+      xhr.onerror = () => reject({ok:false,error:'ارتباط هنگام آپلود قطع شد'});
+      xhr.send(fd);
+    });
+  }
+
+  function formatSize(bytes){
+    bytes = Number(bytes || 0);
+    if (!bytes) return '';
+    if (bytes >= 1024*1024) return faNum((bytes/(1024*1024)).toFixed(bytes >= 100*1024*1024 ? 0 : 1)) + ' مگابایت';
+    return faNum(Math.ceil(bytes/1024)) + ' کیلوبایت';
+  }
+  function renderSheetThumbs(items = []) {
+    if (!thumbsGrid) return;
+    thumbsGrid.innerHTML = (items || []).map((it, idx) => {
+      const type = it.type || (String(it.rel||'').toLowerCase().endsWith('.pdf') ? 'pdf' : 'image');
+      const body = type === 'pdf'
+        ? `<div class="sheet-pdf-thumb"><span class="pdf-ico">PDF</span><b>دفترچه PDF</b><small>${formatSize(it.size)}</small></div>`
+        : `<img src="${esc(it.url || '')}" alt="صفحه ${idx + 1}">`;
+      return `<div class="sheet-thumb-item relative panel ${type==='pdf'?'pdf':''}" data-spath="${esc(it.rel || '')}" data-type="${esc(type)}">
+        <span class="sheet-page-badge badge badge-gold">ص${faNum(idx + 1)}</span>
+        <button type="button" class="btn btn-ghost btn-sm remove-sheet-item-btn" title="حذف این فایل">×</button>
+        ${body}
+      </div>`;
+    }).join('');
+  }
+
   sheetInput?.addEventListener('change', async (e) => {
     const files = e.target.files; if (!files || !files.length) return;
-    if (!examId) await saveMeta();
+    root.dataset.mode = 'quick_sheet';
+    const quickRadio = document.querySelector('input[name="creation_mode"][value="quick_sheet"]');
+    if (quickRadio) quickRadio.checked = true;
+    syncStudioSuites();
+    if (!examId) {
+      const ok = await saveMeta();
+      if (!ok || !examId) { toast('ابتدا عنوان آزمون را وارد کن', 'error'); e.target.value=''; return; }
+    }
     setStatus('saving','در حال آپلود صفحات…');
     
     const fd = new FormData(); 
     fd.append('action','upload_sheet'); 
     fd.append('exam_id', examId);
-    for(let i=0; i<files.length; i++) {
-      fd.append('sheet[]', files[i]);
-    }
+    for(let i=0; i<files.length; i++) fd.append('sheet[]', files[i]);
 
     try {
-      const d = await api(API, { method: 'POST', body: fd });
-      toast('صفحات دفترچه با موفقیت آپلود و اضافه شد 📝', 'success');
+      const d = await uploadFormData(API, fd, pct => setStatus('saving', 'در حال آپلود… ' + faNum(pct) + '٪'));
+      if (d.sheet_items) renderSheetThumbs(d.sheet_items);
+      toast('فایل دفترچه با موفقیت آپلود و اضافه شد 📝', 'success');
       setStatus('saved','✓ آپلود شد');
-      setTimeout(() => location.reload(), 500);
+      goStep(2);
     } catch(err) { toast(err.error || 'خطا در آپلود عکس', 'error'); setStatus('saved','آماده'); }
     e.target.value = '';
   });
@@ -154,8 +215,8 @@
 
     setStatus('saving','در حال حذف…');
     try {
-      await api(API, { method: 'POST', body: { action: 'remove_sheet_item', exam_id: examId, sheet_path: path } });
-      item.remove();
+      const d = await api(API, { method: 'POST', body: { action: 'remove_sheet_item', exam_id: examId, sheet_path: path } });
+      if (d.sheet_items) renderSheetThumbs(d.sheet_items); else item.remove();
       toast('صفحه حذف شد', 'success');
       setStatus('saved','✓ آماده');
     } catch(err) { toast(err.error || 'خطا در حذف', 'error'); setStatus('saved','آماده'); }
@@ -177,7 +238,7 @@
   }
 
   function syncBubblesToKeyInput() {
-    const val = (quickKeyInput?.value || '').replace(/[^1-4]/g, '');
+    const val = (quickKeyInput?.value || '').replace(/[۱١]/g,'1').replace(/[۲٢]/g,'2').replace(/[۳٣]/g,'3').replace(/[۴٤]/g,'4').replace(/[^1-4]/g, '');
     if(keyBadge) keyBadge.textContent = faNum(val.length) + ' سوال';
     
     // اطمینان از وجود کافی آیتم حباب
@@ -237,19 +298,25 @@
   });
 
   document.getElementById('saveQuickSheetSuiteBtn')?.addEventListener('click', async function() {
-    const answerKey = quickKeyInput ? quickKeyInput.value.replace(/[^1-4]/g, '') : '';
+    const rawKey = quickKeyInput ? quickKeyInput.value : '';
+    const answerKey = rawKey.replace(/[۱١]/g,'1').replace(/[۲٢]/g,'2').replace(/[۳٣]/g,'3').replace(/[۴٤]/g,'4').replace(/[^1-4]/g, '');
     if (!answerKey) { toast('لطفاً پاسخنامه کلیدی را وارد کنید یا روی حباب‌ها کلیک کنید', 'error'); return; }
+    if (!examId) {
+      const ok = await saveMeta();
+      if (!ok || !examId) { toast('ابتدا عنوان آزمون را وارد کن', 'error'); return; }
+    }
     
+    const oldHtml = this.innerHTML;
     this.disabled = true; this.innerHTML = '<span class="spinner"></span> در حال ساخت سوالات…';
-    const sheetPath = previewImg ? previewImg.getAttribute('src').replace(/^.*uploads\//, 'uploads/') : '';
+    const sheetPath = thumbsGrid?.querySelector('.sheet-thumb-item')?.dataset.spath || '';
 
     try {
       const d = await api(API, { method: 'POST', body: { action: 'quick_sheet_generate', exam_id: examId, sheet_path: sheetPath, answer_key: answerKey } });
       toast(`آزمون تصویرمحور با موفقیت ساخته شد (${faNum(d.q_count)} سوال) 🎉`, 'success');
-      setTimeout(() => location.reload(), 600);
+      setTimeout(() => { location.href = `${location.pathname}?id=${examId}&step=2&mode=quick_sheet`; }, 650);
     } catch(err) {
       toast(err.error || 'خطا در ثبت نهایی آزمون', 'error');
-      this.disabled = false; this.innerHTML = '✓ ثبت نهایی و ساخت سوالات';
+      this.disabled = false; this.innerHTML = oldHtml || '✓ ثبت نهایی و ساخت سوالات';
     }
   });
 

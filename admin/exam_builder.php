@@ -17,16 +17,22 @@ $subjects = all_subjects();
 $qBySection = [];
 foreach ($questions as $q) $qBySection[(int)$q['section_id']][] = $q;
 
-// مرحله‌ی شروع: اگر آزمون از قبل سوال دارد، مستقیم مرحله ۲
-$startStep = ($exam && count($questions) > 0) ? 2 : 1;
-$mode = $exam['creation_mode'] ?? 'quick_sheet';
+// استخراج صفحات چندتایی آپلودشده
+$sheetArr = [];
+if ($exam) {
+    $sheetArr = !empty($exam['sheet_paths_json']) ? (json_decode((string)$exam['sheet_paths_json'], true) ?: []) : [];
+    if (($exam['sheet_path'] ?? null) && !in_array($exam['sheet_path'], $sheetArr, true)) {
+        array_unshift($sheetArr, $exam['sheet_path']);
+    }
+}
+
+$mode = $_GET['mode'] ?? ($exam['creation_mode'] ?? 'quick_sheet');
+$mode = in_array($mode, ['quick_sheet','standard','ai_bulk'], true) ? $mode : 'quick_sheet';
 if ($mode === 'ai_bulk') $mode = 'quick_sheet';
 
-// استخراج صفحات چندتایی آپلودشده
-$sheetArr = $exam['sheet_paths_json'] ? (json_decode($exam['sheet_paths_json'], true) ?: []) : [];
-if (($exam['sheet_path']??null) && !in_array($exam['sheet_path'], $sheetArr, true)) {
-    array_unshift($sheetArr, $exam['sheet_path']);
-}
+// مرحله‌ی شروع: بعد از آپلود دفترچه یا ساخت سوالات، کاربر باید در استودیو بماند نه مرحله اول.
+$requestedStep = (int)($_GET['step'] ?? 0);
+$startStep = ($requestedStep === 2 || ($exam && (count($questions) > 0 || count($sheetArr) > 0))) ? 2 : 1;
 
 panel_start($exam ? 'ویرایش آزمون' : 'طراحی آزمون جدید', '', 'admin', 'exams', ['builder.css','student.css']);
 ?>
@@ -163,26 +169,34 @@ panel_start($exam ? 'ویرایش آزمون' : 'طراحی آزمون جدید'
           <div>
             <div class="between mb-3 wrap gap-2" style="align-items:center">
               <h4 style="font-size:1.15rem;font-weight:900;color:var(--gold);display:flex;align-items:center;gap:8px">
-                <?= icon('image',20) ?> ۱. آپلود صفحات دفترچه سوالات
+                <?= icon('image',20) ?> ۱. آپلود دفترچه سوالات
               </h4>
-              <span class="badge badge-sage">آپلود چندتایی مجاز است</span>
+              <span class="badge badge-sage">عکس یا PDF</span>
             </div>
-            <p class="muted mb-4" style="font-size:.88rem;line-height:1.7">می‌توانید یک یا چندین عکس از صفحات دفترچه‌ی سوالات کنکور را آپلود کنید تا دانش‌آموز هنگام آزمون، آن‌ها را به‌راحتی ورق بزند.</p>
+            <p class="muted mb-4" style="font-size:.88rem;line-height:1.7">می‌توانید عکس‌های صفحات یا یک فایل PDF دفترچه را آپلود کنید؛ PDF داخل همان باکس آزمون نمایش داده می‌شود.</p>
             
             <label class="upload-zone text-c" style="display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed var(--gold);padding:36px;border-radius:var(--r-lg);background:var(--gold-glass);cursor:pointer;transition:all 0.3s">
               <span style="font-size:2.5rem;color:var(--gold);margin-bottom:12px"><?= icon('paperclip',40) ?></span>
-              <b style="color:var(--text-1);font-size:1.05rem">برای آپلود عکس صفحات دفترچه کلیک کنید</b>
-              <span class="muted mt-1" style="font-size:.8rem">انتخاب چندین فایل همزمان مجاز است (JPG, PNG, WEBP)</span>
-              <input type="file" id="examSheetInput" accept="image/*" multiple hidden>
+              <b style="color:var(--text-1);font-size:1.05rem">برای آپلود عکس یا PDF دفترچه کلیک کنید</b>
+              <span class="muted mt-1" style="font-size:.8rem">JPG, PNG, WEBP, GIF یا PDF تا ۲۰۰MB</span>
+              <input type="file" id="examSheetInput" accept="image/*,application/pdf,.pdf" multiple hidden>
             </label>
 
             <!-- گرید صفحات آپلودشده -->
             <div id="uploadedSheetsThumbsGrid" class="grid gap-3 mt-4" style="grid-template-columns:repeat(auto-fill, minmax(120px, 1fr))">
-              <?php foreach($sheetArr as $si => $sPath): ?>
-                <div class="sheet-thumb-item relative panel" data-spath="<?= e($sPath) ?>" style="background:var(--surface-2);padding:10px;border-radius:12px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
-                  <span class="absolute badge badge-gold" style="top:6px;right:6px;font-size:.7۵rem;padding:2px 6px">ص<?= $si+1 ?></span>
-                  <button type="button" class="btn btn-ghost btn-sm absolute remove-sheet-item-btn" style="top:6px;left:6px;background:rgba(217,116,116,0.2);color:var(--danger);border:1px solid rgba(217,116,116,0.4);padding:0;width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:bold" title="حذف این صفحه">×</button>
-                  <img src="<?= url($sPath) ?>" alt="" style="max-height:140px;max-width:100%;object-fit:contain;border-radius:6px;margin-top:16px">
+              <?php foreach($sheetArr as $si => $sPath): $stype = sheet_asset_type($sPath); $fullPath = __DIR__ . '/../' . $sPath; ?>
+                <div class="sheet-thumb-item relative panel <?= $stype==='pdf'?'pdf':'' ?>" data-spath="<?= e($sPath) ?>" data-type="<?= e($stype) ?>">
+                  <span class="sheet-page-badge badge badge-gold">ص<?= fa_num($si+1) ?></span>
+                  <button type="button" class="btn btn-ghost btn-sm remove-sheet-item-btn" title="حذف این فایل">×</button>
+                  <?php if($stype === 'pdf'): ?>
+                    <div class="sheet-pdf-thumb">
+                      <span class="pdf-ico">PDF</span>
+                      <b>دفترچه PDF</b>
+                      <small><?= is_file($fullPath) ? human_file_size(filesize($fullPath)) : '' ?></small>
+                    </div>
+                  <?php else: ?>
+                    <img src="<?= url($sPath) ?>" alt="صفحه دفترچه">
+                  <?php endif; ?>
                 </div>
               <?php endforeach; ?>
             </div>

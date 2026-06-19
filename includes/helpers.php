@@ -67,6 +67,30 @@ function clamp_int($v, int $min, int $max): int
     return max($min, min($max, $v));
 }
 
+/* ---------- فایل‌های دفترچه آزمون (عکس/PDF) ---------- */
+function sheet_asset_type(?string $path): string
+{
+    $ext = strtolower(pathinfo((string)$path, PATHINFO_EXTENSION));
+    if ($ext === 'pdf') return 'pdf';
+    if (in_array($ext, ['jpg','jpeg','png','webp','gif'], true)) return 'image';
+    return 'file';
+}
+function is_pdf_asset(?string $path): bool { return sheet_asset_type($path) === 'pdf'; }
+function sheet_view_url(string $path, ?int $examId = null): string
+{
+    if (is_pdf_asset($path) && $examId) {
+        return url('api/exam_file.php?exam_id=' . $examId . '&file=' . rawurlencode(basename($path)));
+    }
+    return url($path);
+}
+function human_file_size(int $bytes): string
+{
+    if ($bytes >= 1024 * 1024 * 1024) return fa_num(round($bytes / (1024 * 1024 * 1024), 1)) . ' گیگابایت';
+    if ($bytes >= 1024 * 1024) return fa_num(round($bytes / (1024 * 1024), 1)) . ' مگابایت';
+    if ($bytes >= 1024) return fa_num(round($bytes / 1024, 1)) . ' کیلوبایت';
+    return fa_num($bytes) . ' بایت';
+}
+
 /* ---------- نمایش اعداد فارسی ---------- */
 function fa_num($n): string
 {

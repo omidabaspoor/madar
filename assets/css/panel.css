@@ -165,3 +165,28 @@
   .stat .k { font-size:.76rem; }
   .panel { padding:15px; }
 }
+
+/* ============================================================
+   Mobile polish pass — student/admin panels stay readable and tappable
+   ============================================================ */
+@media (max-width:860px){
+  .app-main{ width:100%; }
+  .content{ width:100%; max-width:100%; padding:14px 12px 92px !important; overflow-x:hidden; }
+  .topbar{ padding:0 12px; gap:8px; }
+  .topbar .tb-title h1{ font-size:1rem; max-width:48vw; }
+  .topbar .tb-title p{ display:none; }
+  .tb-actions .badge{ display:none; }
+  .tb-btn{ width:40px; height:40px; border-radius:12px; }
+  .panel{ border-radius:18px; }
+  .tbl{ display:block; width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .tbl thead,.tbl tbody,.tbl tr{ min-width:640px; }
+  .student-grid,.exam-grid{ grid-template-columns:1fr !important; }
+  .bottom-nav{ height:66px; }
+}
+@media (max-width:420px){
+  .content{ padding-left:10px !important; padding-right:10px !important; }
+  .panel{ padding:14px; border-radius:16px; }
+  .stat-cards{ grid-template-columns:1fr 1fr; gap:9px; }
+  .stat .v{ font-size:1.32rem; }
+  .bn-item .bn-lbl{ font-size:.61rem; }
+}

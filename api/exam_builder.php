@@ -14,6 +14,73 @@ $me = (int)$u['id'];
 $in = array_merge($_POST, body_json());
 $action = (string)($in['action'] ?? '');
 
+const SHEET_IMAGE_MAX = 50 * 1024 * 1024;   // 50MB برای عکس دفترچه
+const SHEET_PDF_MAX   = 200 * 1024 * 1024;  // 200MB برای PDF دفترچه
+
+function ini_size_to_bytes(string $val): int {
+    $val = trim($val); if ($val === '') return 0;
+    $unit = strtolower($val[strlen($val)-1]);
+    $num = (float)$val;
+    $bytes = match($unit){
+        'g' => $num * 1024 * 1024 * 1024,
+        'm' => $num * 1024 * 1024,
+        'k' => $num * 1024,
+        default => $num,
+    };
+    return (int)$bytes;
+}
+if ($action === '' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST) && empty($_FILES)) {
+    $cl = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+    $postMax = ini_size_to_bytes((string)ini_get('post_max_size'));
+    if ($postMax > 0 && $cl > $postMax) {
+        json_out(['ok'=>false,'error'=>'حجم فایل از محدودیت فعلی PHP بیشتر است. مقدار post_max_size/upload_max_filesize را حداقل 220M کنید.'], 413);
+    }
+}
+
+/** ستون‌های استودیوی آزمون‌های تصویرمحور/چندصفحه‌ای را برای نصب‌های قدیمی آماده می‌کند. */
+function ensure_exam_studio_schema(): void {
+    try {
+        $cols = [];
+        foreach (db()->query('SHOW COLUMNS FROM exams')->fetchAll() as $c) $cols[$c['Field']] = true;
+        $adds = [];
+        if (empty($cols['creation_mode']))    $adds[] = "ADD COLUMN creation_mode VARCHAR(30) NOT NULL DEFAULT 'standard' AFTER description";
+        if (empty($cols['sheet_path']))       $adds[] = "ADD COLUMN sheet_path VARCHAR(255) DEFAULT NULL AFTER creation_mode";
+        if (empty($cols['sheet_paths_json'])) $adds[] = "ADD COLUMN sheet_paths_json TEXT DEFAULT NULL AFTER sheet_path";
+        if (empty($cols['answer_key']))       $adds[] = "ADD COLUMN answer_key VARCHAR(500) DEFAULT NULL AFTER sheet_paths_json";
+        if ($adds) db()->exec('ALTER TABLE exams ' . implode(', ', $adds));
+    } catch (Throwable $e) { /* schema errors are reported by the actual action if needed */ }
+}
+ensure_exam_studio_schema();
+
+function normalize_answer_key(string $key): string {
+    $key = strtr($key, [
+        '۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4',
+        '۰'=>'0','٠'=>'0','۵'=>'5','٥'=>'5','۶'=>'6','٦'=>'6','۷'=>'7','٧'=>'7','۸'=>'8','٨'=>'8','۹'=>'9','٩'=>'9',
+    ]);
+    return preg_replace('/[^1-4]/', '', $key) ?: '';
+}
+
+function sheet_items_payload(array $paths, int $examId = 0): array {
+    return array_values(array_map(function($p) {
+        $rel = (string)$p;
+        $full = __DIR__ . '/../' . $rel;
+        return [
+            'rel'=>$rel,
+            'url'=>sheet_view_url($rel, $examId ?: null),
+            'type'=>sheet_asset_type($rel),
+            'name'=>basename($rel),
+            'size'=>is_file($full) ? filesize($full) : 0,
+        ];
+    }, $paths));
+}
+function is_valid_pdf_upload(string $tmp): bool {
+    $fh = @fopen($tmp, 'rb');
+    if (!$fh) return false;
+    $head = fread($fh, 5);
+    fclose($fh);
+    return $head === '%PDF-';
+}
+
 function own_exam(int $examId, int $me, string $role): ?array {
     $e = get_exam($examId);
     if (!$e) return null;
@@ -28,6 +95,8 @@ case 'save_meta': {
     $id = (int)($in['id'] ?? 0);
     $title = trim((string)($in['title'] ?? '')) ?: 'آزمون بدون عنوان';
     $desc = trim((string)($in['description'] ?? '')) ?: null;
+    $mode = in_array($in['creation_mode'] ?? '', ['standard','quick_sheet','ai_bulk'], true) ? $in['creation_mode'] : 'standard';
+    if ($mode === 'ai_bulk') $mode = 'quick_sheet';
     $etype = in_array($in['exam_type'] ?? '', ['single','comprehensive'], true) ? $in['exam_type'] : 'single';
     $timing = in_array($in['timing_mode'] ?? '', ['total','per_section'], true) ? $in['timing_mode'] : 'total';
     $dur = max(1, (int)($in['duration_min'] ?? 60));
@@ -39,11 +108,11 @@ case 'save_meta': {
 
     if ($id) {
         if (!own_exam($id,$me,$u['role'])) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'],404);
-        db()->prepare('UPDATE exams SET title=?,description=?,exam_type=?,timing_mode=?,duration_min=?,negative_marking=?,show_review=?,shuffle_questions=?,start_at=?,end_at=? WHERE id=?')
-            ->execute([$title,$desc,$etype,$timing,$dur,$neg,$rev,$shuf,$start,$end,$id]);
+        db()->prepare('UPDATE exams SET title=?,description=?,creation_mode=?,exam_type=?,timing_mode=?,duration_min=?,negative_marking=?,show_review=?,shuffle_questions=?,start_at=?,end_at=? WHERE id=?')
+            ->execute([$title,$desc,$mode,$etype,$timing,$dur,$neg,$rev,$shuf,$start,$end,$id]);
     } else {
-        db()->prepare('INSERT INTO exams (advisor_id,title,description,exam_type,timing_mode,duration_min,negative_marking,show_review,shuffle_questions,start_at,end_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-            ->execute([$me,$title,$desc,$etype,$timing,$dur,$neg,$rev,$shuf,$start,$end]);
+        db()->prepare('INSERT INTO exams (advisor_id,title,description,creation_mode,exam_type,timing_mode,duration_min,negative_marking,show_review,shuffle_questions,start_at,end_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+            ->execute([$me,$title,$desc,$mode,$etype,$timing,$dur,$neg,$rev,$shuf,$start,$end]);
         $id = (int)db()->lastInsertId();
     }
     json_out(['ok'=>true,'id'=>$id]);
@@ -86,6 +155,9 @@ case 'add_question': {
     $examId = (int)($in['exam_id'] ?? 0);
     $secId  = (int)($in['section_id'] ?? 0);
     if (!own_exam($examId,$me,$u['role'])) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'],404);
+    $secChk = db()->prepare('SELECT id FROM exam_sections WHERE id=? AND exam_id=?');
+    $secChk->execute([$secId, $examId]);
+    if (!$secChk->fetch()) json_out(['ok'=>false,'error'=>'بخش نامعتبر است'],422);
     $so = (int)db()->query('SELECT COALESCE(MAX(sort_order),0)+1 FROM exam_questions WHERE section_id='.$secId)->fetchColumn();
     $ins = db()->prepare('INSERT INTO exam_questions (exam_id,section_id,correct_opt,sort_order) VALUES (?,?,1,?)');
     $ins->execute([$examId,$secId,$so]);
@@ -158,7 +230,13 @@ case 'set_status': {
     db()->prepare('UPDATE exams SET status=? WHERE id=?')->execute([$status,$examId]);
     if ($status==='published') {
         // اعلان به دانش‌آموزان فعال
-        $studs = db()->query("SELECT id FROM users WHERE role='student' AND status='active'")->fetchAll();
+        if ($u['role'] === 'admin') {
+            $studs = db()->query("SELECT id FROM users WHERE role='student' AND status='active'")->fetchAll();
+        } else {
+            $stStud = db()->prepare("SELECT id FROM users WHERE role='student' AND status='active' AND advisor_id=?");
+            $stStud->execute([$me]);
+            $studs = $stStud->fetchAll();
+        }
         foreach ($studs as $s) notify((int)$s['id'],'آزمون جدید منتشر شد 📝', $e['title'], 'clipboard', 'student/exams.php');
     }
     json_out(['ok'=>true,'status'=>$status]);
@@ -204,18 +282,24 @@ case 'delete_exam': {
 case 'reset_attempt': {
     $examId    = (int)($in['exam_id'] ?? 0);
     $attemptId = (int)($in['attempt_id'] ?? 0);
-    if (!own_exam($examId, $me, $u['role'])) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'], 404);
-    
+    $examObj = own_exam($examId, $me, $u['role']);
+    if (!$examObj) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'], 404);
+    $stAtt = db()->prepare('SELECT student_id FROM exam_attempts WHERE id=? AND exam_id=? LIMIT 1');
+    $stAtt->execute([$attemptId, $examId]);
+    $studentId = (int)($stAtt->fetchColumn() ?: 0);
     db()->prepare('DELETE FROM exam_attempts WHERE id=? AND exam_id=?')->execute([$attemptId, $examId]);
+    if ($studentId) {
+        notify($studentId, 'آزمون برای شرکت مجدد باز شد 🔄', 'مشاور پاسخ‌برگ قبلی آزمون «'.$examObj['title'].'» را پاک کرد؛ می‌توانی دوباره آزمون بدهی.', 'clipboard', 'student/exams.php');
+    }
     json_out(['ok'=>true]);
 }
 
 case 'upload_sheet': {
     $examId = (int)($in['exam_id'] ?? 0);
     if (!own_exam($examId, $me, $u['role'])) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'], 404);
-    if (empty($_FILES['sheet'])) json_out(['ok'=>false,'error'=>'فایلی ارسال نشد'], 422);
+    if (empty($_FILES['sheet'])) json_out(['ok'=>false,'error'=>'فایلی ارسال نشد یا حجم آن از محدودیت سرور بیشتر است.'], 422);
     
-    // مدیریت آپلود فایل‌های چندتایی (Multi-Image Quick Sheet Mode)
+    // مدیریت آپلود فایل‌های چندتایی: عکس یا PDF دفترچه
     $files = [];
     if (is_array($_FILES['sheet']['name'])) {
         $cnt = count($_FILES['sheet']['name']);
@@ -244,26 +328,54 @@ case 'upload_sheet': {
     }
 
     $newUrls = [];
+    $savedCount = 0;
     foreach ($files as $f) {
-        if ($f['error'] !== UPLOAD_ERR_OK || empty($f['tmp_name'])) continue;
-        if ($f['size'] > MAX_UPLOAD * 4) json_out(['ok'=>false,'error'=>'حجم یکی از عکس‌ها بیش از حد مجاز است'], 422);
-        $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext, ['jpg','jpeg','png','webp'], true)) json_out(['ok'=>false,'error'=>'فرمت عکس مجاز نیست (فقط JPG, PNG, WEBP)'], 422);
+        $err = (int)($f['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($err === UPLOAD_ERR_NO_FILE || empty($f['tmp_name'])) continue;
+        if ($err !== UPLOAD_ERR_OK) {
+            $msg = match($err) {
+                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'حجم فایل از محدودیت تنظیمات سرور بیشتر است. upload_max_filesize/post_max_size را حداقل 220M کنید.',
+                UPLOAD_ERR_PARTIAL => 'آپلود فایل کامل نشد؛ دوباره تلاش کنید.',
+                default => 'خطا در آپلود فایل دفترچه.',
+            };
+            json_out(['ok'=>false,'error'=>$msg], 422);
+        }
 
-        $name = 'sheet_'.$examId.'_'.bin2hex(random_bytes(5)).'.'.$ext;
+        $ext = strtolower(pathinfo((string)$f['name'], PATHINFO_EXTENSION));
+        $size = (int)($f['size'] ?? 0);
+        if ($ext === 'pdf') {
+            if ($size <= 0 || $size > SHEET_PDF_MAX) json_out(['ok'=>false,'error'=>'حجم PDF باید حداکثر ۲۰۰ مگابایت باشد.'], 422);
+            if (!is_valid_pdf_upload((string)$f['tmp_name'])) json_out(['ok'=>false,'error'=>'فایل PDF معتبر نیست.'], 422);
+        } else {
+            if ($size <= 0 || $size > SHEET_IMAGE_MAX) json_out(['ok'=>false,'error'=>'حجم عکس دفترچه باید حداکثر ۵۰ مگابایت باشد.'], 422);
+            if (!in_array($ext, ['jpg','jpeg','png','webp','gif'], true)) json_out(['ok'=>false,'error'=>'فرمت مجاز: JPG, PNG, WEBP, GIF یا PDF'], 422);
+            $info = @getimagesize((string)$f['tmp_name']);
+            if (!$info) json_out(['ok'=>false,'error'=>'فایل عکس معتبر نیست.'], 422);
+        }
+
+        $name = 'sheet_'.$examId.'_'.bin2hex(random_bytes(6)).'.'.$ext;
         $dest = UPLOAD_DIR.'/exams/'.$name;
-        if (!move_uploaded_file($f['tmp_name'], $dest)) json_out(['ok'=>false,'error'=>'خطا در ذخیره عکس صفحه'], 500);
+        if (!move_uploaded_file((string)$f['tmp_name'], $dest)) json_out(['ok'=>false,'error'=>'خطا در ذخیره فایل دفترچه'], 500);
         $rel = 'uploads/exams/'.$name;
         $existingArr[] = $rel;
         $newUrls[] = url($rel);
+        $savedCount++;
     }
+    if ($savedCount === 0) json_out(['ok'=>false,'error'=>'هیچ فایل معتبری برای آپلود دریافت نشد.'], 422);
     
     $existingArr = array_values(array_unique($existingArr));
     $firstPath   = $existingArr[0] ?? null;
     $jsonArrStr  = json_encode($existingArr, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-    db()->prepare('UPDATE exams SET sheet_path=?, sheet_paths_json=? WHERE id=?')->execute([$firstPath, $jsonArrStr, $examId]);
-    json_out(['ok'=>true, 'url'=>url((string)$firstPath), 'rel'=>$firstPath, 'sheets'=>$existingArr, 'urls'=>$newUrls]);
+    db()->prepare('UPDATE exams SET creation_mode="quick_sheet", sheet_path=?, sheet_paths_json=? WHERE id=?')->execute([$firstPath, $jsonArrStr, $examId]);
+    json_out([
+        'ok'=>true,
+        'url'=>$firstPath ? url((string)$firstPath) : '',
+        'rel'=>$firstPath,
+        'sheets'=>$existingArr,
+        'sheet_items'=>sheet_items_payload($existingArr, $examId),
+        'urls'=>$newUrls
+    ]);
 }
 
 case 'remove_sheet_item': {
@@ -284,7 +396,7 @@ case 'remove_sheet_item': {
     $jsonArrStr = $existingArr ? json_encode($existingArr, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
 
     db()->prepare('UPDATE exams SET sheet_path=?, sheet_paths_json=? WHERE id=?')->execute([$firstPath, $jsonArrStr, $examId]);
-    json_out(['ok'=>true, 'sheets'=>$existingArr, 'first'=>$firstPath]);
+    json_out(['ok'=>true, 'sheets'=>$existingArr, 'sheet_items'=>sheet_items_payload($existingArr, $examId), 'first'=>$firstPath]);
 }
 
 case 'quick_sheet_generate': {
@@ -294,14 +406,18 @@ case 'quick_sheet_generate': {
     
     $sheetPath = trim((string)($in['sheet_path'] ?? ''));
     $answerKey = trim((string)($in['answer_key'] ?? ''));
+    $sheetArr = $e['sheet_paths_json'] ? (json_decode((string)$e['sheet_paths_json'], true) ?: []) : [];
+    if (!empty($e['sheet_path']) && !in_array($e['sheet_path'], $sheetArr, true)) array_unshift($sheetArr, $e['sheet_path']);
+    if ($sheetPath === '') $sheetPath = (string)($sheetArr[0] ?? ($e['sheet_path'] ?? ''));
     
-    $cleanKey = preg_replace('/[^1-4]/', '', $answerKey);
-    $qCount = mb_strlen($cleanKey);
+    $cleanKey = normalize_answer_key($answerKey);
+    $qCount = strlen($cleanKey);
     if ($qCount === 0) json_out(['ok'=>false, 'error'=>'کلید پاسخنامه معتبر نیست (باید شامل اعداد ۱ تا ۴ باشد)'], 422);
 
     db()->beginTransaction();
     try {
-        db()->prepare('UPDATE exams SET creation_mode="quick_sheet", answer_key=? WHERE id=?')->execute([$answerKey, $examId]);
+        $answerKeyToStore = $cleanKey;
+        db()->prepare('UPDATE exams SET creation_mode="quick_sheet", answer_key=? WHERE id=?')->execute([$answerKeyToStore, $examId]);
         if ($sheetPath && !$e['sheet_path']) {
             db()->prepare('UPDATE exams SET sheet_path=? WHERE id=?')->execute([$sheetPath, $examId]);
         }
@@ -311,10 +427,11 @@ case 'quick_sheet_generate': {
         db()->prepare('INSERT INTO exam_sections (exam_id, name, sort_order) VALUES (?, "سوالات دفترچه کنکور", 1)')->execute([$examId]);
         $secId = (int)db()->lastInsertId();
         
+        $questionImage = sheet_asset_type($sheetPath) === 'image' ? $sheetPath : null;
         $ins = db()->prepare('INSERT INTO exam_questions (exam_id, section_id, q_text, q_image, correct_opt, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
         for ($i = 0; $i < $qCount; $i++) {
             $cor = (int)$cleanKey[$i];
-            $ins->execute([$examId, $secId, 'سوال ' . fa_num($i + 1), $sheetPath ?: null, $cor, $i + 1]);
+            $ins->execute([$examId, $secId, 'سوال ' . fa_num($i + 1), $questionImage, $cor, $i + 1]);
         }
         db()->commit();
     } catch (Throwable $ex) {
