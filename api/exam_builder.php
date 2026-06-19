@@ -201,6 +201,194 @@ case 'delete_exam': {
     json_out(['ok'=>true]);
 }
 
+case 'reset_attempt': {
+    $examId    = (int)($in['exam_id'] ?? 0);
+    $attemptId = (int)($in['attempt_id'] ?? 0);
+    if (!own_exam($examId, $me, $u['role'])) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'], 404);
+    
+    db()->prepare('DELETE FROM exam_attempts WHERE id=? AND exam_id=?')->execute([$attemptId, $examId]);
+    json_out(['ok'=>true]);
+}
+
+case 'upload_sheet': {
+    $examId = (int)($in['exam_id'] ?? 0);
+    if (!own_exam($examId, $me, $u['role'])) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'], 404);
+    if (empty($_FILES['sheet'])) json_out(['ok'=>false,'error'=>'فایلی ارسال نشد'], 422);
+    
+    // مدیریت آپلود فایل‌های چندتایی (Multi-Image Quick Sheet Mode)
+    $files = [];
+    if (is_array($_FILES['sheet']['name'])) {
+        $cnt = count($_FILES['sheet']['name']);
+        for ($fi=0; $fi<$cnt; $fi++) {
+            $files[] = [
+                'name'     => $_FILES['sheet']['name'][$fi],
+                'type'     => $_FILES['sheet']['type'][$fi],
+                'tmp_name' => $_FILES['sheet']['tmp_name'][$fi],
+                'error'    => $_FILES['sheet']['error'][$fi],
+                'size'     => $_FILES['sheet']['size'][$fi],
+            ];
+        }
+    } else {
+        $files[] = $_FILES['sheet'];
+    }
+
+    if (!is_dir(UPLOAD_DIR.'/exams')) @mkdir(UPLOAD_DIR.'/exams', 0775, true);
+
+    // استخراج صفحات قبلی
+    $stE = db()->prepare('SELECT sheet_path, sheet_paths_json FROM exams WHERE id=?');
+    $stE->execute([$examId]);
+    $exObj = $stE->fetch();
+    $existingArr = $exObj['sheet_paths_json'] ? (json_decode($exObj['sheet_paths_json'], true) ?: []) : [];
+    if ($exObj['sheet_path'] && !in_array($exObj['sheet_path'], $existingArr, true)) {
+        array_unshift($existingArr, $exObj['sheet_path']);
+    }
+
+    $newUrls = [];
+    foreach ($files as $f) {
+        if ($f['error'] !== UPLOAD_ERR_OK || empty($f['tmp_name'])) continue;
+        if ($f['size'] > MAX_UPLOAD * 4) json_out(['ok'=>false,'error'=>'حجم یکی از عکس‌ها بیش از حد مجاز است'], 422);
+        $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['jpg','jpeg','png','webp'], true)) json_out(['ok'=>false,'error'=>'فرمت عکس مجاز نیست (فقط JPG, PNG, WEBP)'], 422);
+
+        $name = 'sheet_'.$examId.'_'.bin2hex(random_bytes(5)).'.'.$ext;
+        $dest = UPLOAD_DIR.'/exams/'.$name;
+        if (!move_uploaded_file($f['tmp_name'], $dest)) json_out(['ok'=>false,'error'=>'خطا در ذخیره عکس صفحه'], 500);
+        $rel = 'uploads/exams/'.$name;
+        $existingArr[] = $rel;
+        $newUrls[] = url($rel);
+    }
+    
+    $existingArr = array_values(array_unique($existingArr));
+    $firstPath   = $existingArr[0] ?? null;
+    $jsonArrStr  = json_encode($existingArr, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    db()->prepare('UPDATE exams SET sheet_path=?, sheet_paths_json=? WHERE id=?')->execute([$firstPath, $jsonArrStr, $examId]);
+    json_out(['ok'=>true, 'url'=>url((string)$firstPath), 'rel'=>$firstPath, 'sheets'=>$existingArr, 'urls'=>$newUrls]);
+}
+
+case 'remove_sheet_item': {
+    $examId = (int)($in['exam_id'] ?? 0);
+    $pathToRemove = trim((string)($in['sheet_path'] ?? ''));
+    if (!own_exam($examId, $me, $u['role'])) json_out(['ok'=>false,'error'=>'یافت نشد'], 404);
+
+    $stE = db()->prepare('SELECT sheet_path, sheet_paths_json FROM exams WHERE id=?');
+    $stE->execute([$examId]);
+    $exObj = $stE->fetch();
+    $existingArr = $exObj['sheet_paths_json'] ? (json_decode($exObj['sheet_paths_json'], true) ?: []) : [];
+    
+    // حذف آیتم
+    $existingArr = array_values(array_filter($existingArr, fn($p) => $p !== $pathToRemove));
+    if ($pathToRemove) @unlink(__DIR__.'/../'.$pathToRemove);
+
+    $firstPath  = $existingArr[0] ?? null;
+    $jsonArrStr = $existingArr ? json_encode($existingArr, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+
+    db()->prepare('UPDATE exams SET sheet_path=?, sheet_paths_json=? WHERE id=?')->execute([$firstPath, $jsonArrStr, $examId]);
+    json_out(['ok'=>true, 'sheets'=>$existingArr, 'first'=>$firstPath]);
+}
+
+case 'quick_sheet_generate': {
+    $examId = (int)($in['exam_id'] ?? 0);
+    $e = own_exam($examId, $me, $u['role']);
+    if (!$e) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'], 404);
+    
+    $sheetPath = trim((string)($in['sheet_path'] ?? ''));
+    $answerKey = trim((string)($in['answer_key'] ?? ''));
+    
+    $cleanKey = preg_replace('/[^1-4]/', '', $answerKey);
+    $qCount = mb_strlen($cleanKey);
+    if ($qCount === 0) json_out(['ok'=>false, 'error'=>'کلید پاسخنامه معتبر نیست (باید شامل اعداد ۱ تا ۴ باشد)'], 422);
+
+    db()->beginTransaction();
+    try {
+        db()->prepare('UPDATE exams SET creation_mode="quick_sheet", answer_key=? WHERE id=?')->execute([$answerKey, $examId]);
+        if ($sheetPath && !$e['sheet_path']) {
+            db()->prepare('UPDATE exams SET sheet_path=? WHERE id=?')->execute([$sheetPath, $examId]);
+        }
+        
+        db()->prepare('DELETE FROM exam_sections WHERE exam_id=?')->execute([$examId]);
+        
+        db()->prepare('INSERT INTO exam_sections (exam_id, name, sort_order) VALUES (?, "سوالات دفترچه کنکور", 1)')->execute([$examId]);
+        $secId = (int)db()->lastInsertId();
+        
+        $ins = db()->prepare('INSERT INTO exam_questions (exam_id, section_id, q_text, q_image, correct_opt, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
+        for ($i = 0; $i < $qCount; $i++) {
+            $cor = (int)$cleanKey[$i];
+            $ins->execute([$examId, $secId, 'سوال ' . fa_num($i + 1), $sheetPath ?: null, $cor, $i + 1]);
+        }
+        db()->commit();
+    } catch (Throwable $ex) {
+        db()->rollBack();
+        throw $ex;
+    }
+    json_out(['ok'=>true, 'q_count'=>$qCount]);
+}
+
+case 'ai_bulk_generate': {
+    $examId = (int)($in['exam_id'] ?? 0);
+    $e = own_exam($examId, $me, $u['role']);
+    if (!$e) json_out(['ok'=>false, 'error'=>'آزمون یافت نشد'], 404);
+
+    $bulkText = trim((string)($in['bulk_text'] ?? ''));
+    if (!$bulkText) json_out(['ok'=>false, 'error'=>'متن سوالات ارسال نشده است'], 422);
+
+    // پارس کردن سوالات از متن
+    $questions = [];
+    $rawQuestions = preg_split('/(?=\n\s*\d+[\.\-\)]|\n\s*سوال\s*\d+)/u', $bulkText);
+    
+    foreach ($rawQuestions as $rq) {
+        $rq = trim($rq);
+        if (!$rq) continue;
+        
+        $lines = array_values(array_filter(array_map('trim', explode("\n", $rq))));
+        if (count($lines) < 2) continue;
+
+        $qText = $lines[0];
+        $o1 = ''; $o2 = ''; $o3 = ''; $o4 = '';
+        $cor = 1;
+
+        $rest = implode('  ', array_slice($lines, 1));
+        
+        $opts = preg_split('/(?:\s+|\b)(?:1|2|3|4|الف|ب|ج|د)[\)\.\-]/u', $rest);
+        $opts = array_values(array_filter(array_map('trim', $opts)));
+
+        if (isset($opts[0])) $o1 = $opts[0];
+        if (isset($opts[1])) $o2 = $opts[1];
+        if (isset($opts[2])) $o3 = $opts[2];
+        if (isset($opts[3])) $o4 = $opts[3];
+
+        if (str_contains($o1, '*') || str_contains($o1, '#')) { $cor = 1; $o1 = str_replace(['*','#'], '', $o1); }
+        if (str_contains($o2, '*') || str_contains($o2, '#')) { $cor = 2; $o2 = str_replace(['*','#'], '', $o2); }
+        if (str_contains($o3, '*') || str_contains($o3, '#')) { $cor = 3; $o3 = str_replace(['*','#'], '', $o3); }
+        if (str_contains($o4, '*') || str_contains($o4, '#')) { $cor = 4; $o4 = str_replace(['*','#'], '', $o4); }
+
+        $questions[] = [
+            'qText' => $qText, 'o1' => trim($o1), 'o2' => trim($o2), 'o3' => trim($o3), 'o4' => trim($o4), 'cor' => $cor
+        ];
+    }
+
+    if (!$questions) json_out(['ok'=>false, 'error'=>'هیچ سوال استانداردی در متن یافت نشد. لطفاً ساختار شماره‌گذاری را بررسی کنید.'], 422);
+
+    db()->beginTransaction();
+    try {
+        db()->prepare('UPDATE exams SET creation_mode="ai_bulk" WHERE id=?')->execute([$examId]);
+        db()->prepare('DELETE FROM exam_sections WHERE exam_id=?')->execute([$examId]);
+        
+        db()->prepare('INSERT INTO exam_sections (exam_id, name, sort_order) VALUES (?, "سوالات پردازش‌شده", 1)')->execute([$examId]);
+        $secId = (int)db()->lastInsertId();
+
+        $ins = db()->prepare('INSERT INTO exam_questions (exam_id, section_id, q_text, opt1, opt2, opt3, opt4, correct_opt, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        foreach ($questions as $idx => $q) {
+            $ins->execute([$examId, $secId, $q['qText'], $q['o1'], $q['o2'], $q['o3'], $q['o4'], $q['cor'], $idx + 1]);
+        }
+        db()->commit();
+    } catch (Throwable $ex) {
+        db()->rollBack();
+        throw $ex;
+    }
+    json_out(['ok'=>true, 'q_count'=>count($questions)]);
+}
+
 default: json_out(['ok'=>false,'error'=>'عملیات نامعتبر'],400);
 }
 } catch (Throwable $e) {

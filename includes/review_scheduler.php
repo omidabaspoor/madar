@@ -14,38 +14,64 @@ function review_norm(string $s): string
 function review_profile_for_subject(?string $subjectName, string $taskType='study'): array
 {
     $n = review_norm((string)$subjectName);
-    // مبنا: مرور کوتاه همان روز داخل خود برنامه/واحد ویژه انجام می‌شود؛ یادآورهای سیستمی از روزهای بعد شروع می‌شوند.
-    // برای کنکور، بازه‌ها نباید آن‌قدر فشرده باشند که فرصت مطالعه درس‌های دیگر را بگیرند.
-    if ($n !== '' && mb_strpos($n, 'زیست') !== false) {
-        return ['key'=>'bio','label'=>'زیست/فرّار','intervals'=>[1,3,7,14,30,60], 'minutes'=>15];
-    }
-    foreach (['دینی','دین','ادبیات','عربی'] as $k) {
-        if ($n !== '' && mb_strpos($n, $k) !== false) {
-            return ['key'=>'memorization','label'=>'حفظی کنکوری','intervals'=>[1,7,14,30,60,90], 'minutes'=>12];
-        }
-    }
-    foreach (['زبان','لغت'] as $k) {
-        if ($n !== '' && mb_strpos($n, $k) !== false) {
-            return ['key'=>'vocabulary','label'=>'لغت/زبان','intervals'=>[1,3,7,14,30,60], 'minutes'=>10];
-        }
-    }
-    foreach (['هویت','سلامت'] as $k) {
-        if ($n !== '' && mb_strpos($n, $k) !== false) {
-            return ['key'=>'light_memory','label'=>'حفظی سبک','intervals'=>[1,7,14,30,60], 'minutes'=>10];
-        }
-    }
-    if ($n !== '' && mb_strpos($n, 'شیمی') !== false) {
-        return ['key'=>'mixed','label'=>'ترکیبی','intervals'=>[1,7,14,30,60], 'minutes'=>15];
-    }
+
+    // ۱. دروس محاسباتی، تمرینی و تحلیلی (فیزیک، ریاضی، حسابان، هندسه، گسسته):
+    // دانش‌آموز کنکوری در این دروس نیازی به مرور حفظیِ فردای آن روز ندارد؛ بلکه باید چند روز بعد با تست آموزشی و زمان‌دار سنجیده شود.
     foreach (['ریاضی','حسابان','هندسه','گسسته','فیزیک'] as $k) {
         if ($n !== '' && mb_strpos($n, $k) !== false) {
-            return ['key'=>'problem_solving','label'=>'تمرینی/محاسباتی','intervals'=>[3,7,14,30,60], 'minutes'=>20];
+            return [
+                'key'      => 'problem_solving',
+                'label'    => 'تمرینی / محاسباتی کنکور',
+                'intervals'=> [3, 10, 25, 60], // فواصل بازتر و منطقی برای حل تست
+                'minutes'  => 20
+            ];
         }
     }
-    if ($taskType === 'textbook' || $taskType === 'reading') {
-        return ['key'=>'reading','label'=>'خواندنی','intervals'=>[1,7,14,30,60], 'minutes'=>12];
+
+    // ۲. دروس به شدت فرّار و پرنکته (زیست‌شناسی، شیمی):
+    // نیازمند مرور سریع تصاویر/جداول بعد از ۲ روز، سپس بازیابی فاصله‌دار.
+    if ($n !== '' && (mb_strpos($n, 'زیست') !== false || mb_strpos($n, 'شیمی') !== false)) {
+        return [
+            'key'      => 'volatile_science',
+            'label'    => 'علوم فرّار / تحلیلی',
+            'intervals'=> [2, 7, 16, 35, 75],
+            'minutes'  => 15
+        ];
     }
-    return ['key'=>'standard','label'=>'استاندارد','intervals'=>[1,7,14,30,60], 'minutes'=>12];
+
+    // ۳. دروس متنی و حفظیات ناب (دینی، ادبیات، عربی، زبان، لغت):
+    // بازیابی استاندارد کنکوری.
+    foreach (['دینی','دین','ادبیات','عربی','زبان','لغت'] as $k) {
+        if ($n !== '' && mb_strpos($n, $k) !== false) {
+            return [
+                'key'      => 'konkur_memory',
+                'label'    => 'حفظی کنکوری',
+                'intervals'=> [1, 5, 14, 30, 60],
+                'minutes'  => 12
+            ];
+        }
+    }
+
+    // ۴. دروس عمومی سبک (هویت اجتماعی، سلامت و بهداشت):
+    // فواصل کاملاً باز تا وقت دروس اصلی را نگیرد.
+    foreach (['هویت','سلامت'] as $k) {
+        if ($n !== '' && mb_strpos($n, $k) !== false) {
+            return [
+                'key'      => 'light_memory',
+                'label'    => 'عمومی سبک',
+                'intervals'=> [7, 21, 45],
+                'minutes'  => 10
+            ];
+        }
+    }
+
+    // پیش‌فرض استاندارد برای سایر موارد
+    return [
+        'key'      => 'standard',
+        'label'    => 'مرور استاندارد',
+        'intervals'=> [2, 8, 20, 45],
+        'minutes'  => 12
+    ];
 }
 function review_profile_for_task(array $t): array
 {
@@ -110,7 +136,9 @@ function review_schema_ready(): bool
           'updated_at'=>'ALTER TABLE review_reminders ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at',
         ];
         foreach($adds as $col=>$sql) {
-            if(empty($cols[$col])) db()->exec($sql);
+            if(empty($cols[$col])) {
+                try { db()->exec($sql); } catch (Throwable $e) {}
+            }
         }
 
         // ایندکس‌ها اگر از migration قبلی جا مانده باشند.
@@ -134,9 +162,13 @@ function review_is_eligible_task(array $t): bool
     if (!in_array($type, ['study','textbook','reading','custom'], true)) return false;
     $title = trim((string)($t['title'] ?? ''));
     if ($title === '') return false;
-    // تسک‌های تستی/آزمونی را با عنوان هم حذف کن تا مرورهای اضافی ساخته نشود.
-    $bad = ['تست','آزمون','آزمونک','تحلیل'];
-    foreach ($bad as $b) if (mb_strpos($title, $b) !== false && $type !== 'textbook') return false;
+    
+    // تسک‌های تستی/آزمونی و روتین‌های عمومی/ویژه را کاملاً فیلتر کن تا اسپم نشود
+    $bad = ['تست','آزمون','آزمونک','تحلیل','روزخوانی','مرور ویژه','غلط‌نامه','special','mock'];
+    foreach ($bad as $b) {
+        if (mb_strpos($title, $b) !== false) return false;
+    }
+    if ((int)($t['unit_index'] ?? 0) === 8) return false; // واحد ویژه کلاً استثناست و نباید وارد سیستم مرور شود
     return true;
 }
 
@@ -151,9 +183,36 @@ function review_create_for_task(int $taskId): int
     if ($advisorId && function_exists('advisor_feature_enabled') && !advisor_feature_enabled($advisorId, 'review_enabled')) return 0;
     $status = task_status($t);
     if (!in_array($status, ['full','partial'], true)) return 0;
+
+    // مکانیزم Debounce / De-duplication: جلوگیری از ثبت زنجیره‌ی مرور تکراری برای یک مبحث در بازه‌ی ۴ روزه
+    $dupCheck = db()->prepare('SELECT id FROM review_reminders WHERE student_id=? AND topic_title=? AND status="pending" AND first_studied_at >= DATE_SUB(NOW(), INTERVAL 4 DAY) LIMIT 1');
+    $dupCheck->execute([(int)$t['student_id'], trim((string)$t['title'])]);
+    if ($dupCheck->fetch()) {
+        return 0; // قبلاً برای این مبحث در همین چند روز اخیر زنجیره‌ی مرور ساخته شده است
+    }
+
     $first = $t['completed_at'] ?: date('Y-m-d H:i:s');
     $baseDate = date('Y-m-d', strtotime($first));
     $profile = review_profile_for_task($t);
+    
+    // هوشمندسازی سامورایی بر اساس حس و حال دانش‌آموز و جزئیات اجرا (Granular Task Feeling Awareness)
+    $feeling = (string)($t['student_feeling'] ?? '');
+    if ($feeling === 'hard' || $feeling === 'bad' || $status === 'partial') {
+        // مبحث چالش‌برانگیز یا ناقص بوده؛ نیازمند مرور نجات فوری در روز ۱، سپس فواصل فشرده‌تر
+        $profile['intervals'] = [1, 4, 10, 20, 40];
+        $profile['label']     = 'مرور نجات (' . ($status==='partial'?'اجرای ناقص':'مبحث سخت') . ')';
+        $profile['minutes']   = (int)round($profile['minutes'] * 1.5);
+    } elseif ($feeling === 'tired') {
+        // مطالعه همراه با خستگی؛ نیازمند بازیابی تازه
+        $profile['intervals'] = [2, 8, 18, 35];
+        $profile['label']     = e($profile['label']) . ' (بازیابی خستگی)';
+    } elseif ($feeling === 'great' || $feeling === 'great') {
+        // تسلط عالی؛ فواصل بازتر و زمان بهینه‌تر
+        $profile['intervals'] = array_map(fn($d)=>(int)round($d*1.2), $profile['intervals']);
+        $profile['label']     = e($profile['label']) . ' (تسلط کامل)';
+        $profile['minutes']   = max(10, (int)round($profile['minutes'] * 0.85));
+    }
+
     $exists = db()->prepare('SELECT id FROM review_reminders WHERE source_task_id=? AND interval_days=? LIMIT 1');
     $ins = db()->prepare('INSERT IGNORE INTO review_reminders (student_id,source_task_id,subject_id,topic_title,source,first_studied_at,interval_days,review_no,profile_key,profile_label,suggested_minutes,due_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
     $n = 0; $i = 1;
@@ -191,6 +250,12 @@ function review_due_notifications(int $studentId): int
 function review_counts(int $studentId): array
 {
     if (!review_schema_ready()) return ['due'=>0,'upcoming'=>0,'done'=>0];
+    $st = db()->prepare("SELECT COUNT(*) c FROM review_reminders WHERE student_id=?");
+    $st->execute([$studentId]);
+    if ((int)$st->fetchColumn() === 0) {
+        review_backfill_for_student($studentId);
+    }
+
     $st = db()->prepare("SELECT
       SUM(status='pending' AND due_date<=CURDATE()) due_count,
       SUM(status='pending' AND due_date>CURDATE()) upcoming_count,
@@ -204,6 +269,12 @@ function review_counts(int $studentId): array
 function review_items(int $studentId, string $scope='due'): array
 {
     if (!review_schema_ready()) return [];
+    $st = db()->prepare("SELECT COUNT(*) c FROM review_reminders WHERE student_id=?");
+    $st->execute([$studentId]);
+    if ((int)$st->fetchColumn() === 0) {
+        review_backfill_for_student($studentId);
+    }
+
     if ($scope === 'upcoming') $where = "status='pending' AND due_date>CURDATE()";
     elseif ($scope === 'done') $where = "status='done'";
     else $where = "status='pending' AND due_date<=CURDATE()";

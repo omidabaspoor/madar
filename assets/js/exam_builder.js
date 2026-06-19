@@ -1,5 +1,5 @@
 /* =================================================================
-   Exam Builder — fast question entry + 5s autosave
+   مَدار Exam Builder — Samurai Multi-Mode Studio
    ================================================================= */
 (() => {
   'use strict';
@@ -10,7 +10,7 @@
   const status = document.getElementById('saveStatus');
   const faNum = (n)=>String(n).replace(/\d/g,d=>'۰۱۲۳۴۵۶۷۸۹'[d]);
   const esc = (s)=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  let dirty = new Set();        // question ids with unsaved changes
+  let dirty = new Set();
   let metaDirty = false;
 
   const ICO={check:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>',
@@ -24,29 +24,50 @@
   const setStatus=(s,t)=>{ status.className='save-status '+s;
     status.innerHTML=(s==='saving'?'<span class="spinner" style="width:14px;height:14px"></span>':ICO.check)+' '+t; };
 
-  /* ---- auto-grow textareas ---- */
   function grow(el){ el.style.height='auto'; el.style.height=el.scrollHeight+'px'; }
   document.querySelectorAll('.q-text').forEach(grow);
 
-  /* ---- timing mode display ---- */
   function syncTiming(){
     const v=document.getElementById('m_timing').value;
     root.dataset.timing=v;
-    document.getElementById('totalDurField').style.display = v==='total'?'':'none';
+    const tf = document.getElementById('totalDurField');
+    if(tf) tf.style.display = v==='total'?'':'none';
   }
-  document.getElementById('m_timing').addEventListener('change',()=>{ syncTiming(); metaDirty=true; });
+  document.getElementById('m_timing')?.addEventListener('change',()=>{ syncTiming(); metaDirty=true; });
   syncTiming();
 
-  /* ---- type cards (radio) ---- */
-  document.querySelectorAll('.type-card').forEach(card=>{
-    card.addEventListener('click',()=>{
-      document.querySelectorAll('.type-card').forEach(c=>c.classList.remove('active'));
-      card.classList.add('active'); metaDirty=true;
+  // شیوه طراحی (Creation mode radio buttons)
+  function creationMode() {
+    return document.querySelector('input[name="creation_mode"]:checked')?.value || 'standard';
+  }
+
+  document.querySelectorAll('.mode-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.mode-card').forEach(c => {
+        c.classList.remove('active');
+        c.style.borderColor = 'var(--border-soft)';
+        c.style.background = 'var(--surface-1)';
+      });
+      card.classList.add('active');
+      card.style.borderColor = card.querySelector('input').value === 'quick_sheet' ? 'var(--gold)' : 'var(--cyan)';
+      card.style.background = 'var(--surface-2)';
+      root.dataset.mode = card.querySelector('input').value;
+      metaDirty = true;
+      syncStudioSuites();
     });
   });
+
+  function syncStudioSuites() {
+    const mode = root.dataset.mode || 'quick_sheet';
+    document.querySelectorAll('.studio-suite').forEach(suite => {
+      if (suite.id === 'suiteQuickSheet') suite.classList.toggle('hidden', mode !== 'quick_sheet');
+      if (suite.id === 'suiteStandard')   suite.classList.toggle('hidden', mode !== 'standard');
+    });
+  }
+  syncStudioSuites();
+
   function examType(){ return document.querySelector('input[name="exam_type"]:checked')?.value || 'single'; }
 
-  /* ---- META autosave (debounced) ---- */
   function metaPayload(){
     return {
       action:'save_meta', id:examId,
@@ -58,9 +79,11 @@
       start_at:document.getElementById('m_start').value,
       negative_marking:document.getElementById('m_neg').checked?'1':'0',
       show_review:document.getElementById('m_rev').checked?'1':'0',
-      shuffle_questions:document.getElementById('m_shuf').checked?'1':'0',
+      shuffle_questions:document.getElementById('m_shuf')?.checked?'1':'0',
+      creation_mode:creationMode(),
     };
   }
+
   async function saveMeta(){
     const title=document.getElementById('m_title').value.trim();
     if(!title){ return false; }
@@ -72,16 +95,17 @@
       }
       metaDirty=false; setStatus('saved','ذخیره شد');
       return true;
-    }catch(e){ setStatus('saved','ذخیره خودکار فعال'); return false; }
+    }catch(e){ setStatus('saved','آماده'); return false; }
   }
-  document.getElementById('metaForm').addEventListener('input',()=>{ metaDirty=true; });
+  document.getElementById('metaForm')?.addEventListener('input',()=>{ metaDirty=true; });
 
-  /* ---- stepper navigation ---- */
   function goStep(n){
     root.dataset.step=n;
     document.querySelectorAll('.builder-step').forEach(s=>s.classList.toggle('hidden', s.dataset.step!=String(n)));
+    document.querySelectorAll('.stepper .step').forEach(b => b.classList.toggle('active', b.dataset.stepTo==String(n)));
     window.scrollTo({top:0,behavior:'smooth'});
   }
+
   async function gotoQuestions(){
     const title=document.getElementById('m_title').value.trim();
     if(!title){ toast('لطفاً عنوان آزمون را وارد کن','error'); document.getElementById('m_title').focus(); return; }
@@ -95,7 +119,143 @@
     if(n===2){ gotoQuestions(); } else { if(metaDirty) saveMeta(); goStep(1); }
   }));
 
-  /* ---- collect all question data ---- */
+  /* =================================================================
+     SAMURAI STUDIO 1: Multi-Image Quick Sheet & Batch Bubbles
+     ================================================================= */
+  const sheetInput  = document.getElementById('examSheetInput');
+  const thumbsGrid  = document.getElementById('uploadedSheetsThumbsGrid');
+
+  sheetInput?.addEventListener('change', async (e) => {
+    const files = e.target.files; if (!files || !files.length) return;
+    if (!examId) await saveMeta();
+    setStatus('saving','در حال آپلود صفحات…');
+    
+    const fd = new FormData(); 
+    fd.append('action','upload_sheet'); 
+    fd.append('exam_id', examId);
+    for(let i=0; i<files.length; i++) {
+      fd.append('sheet[]', files[i]);
+    }
+
+    try {
+      const d = await api(API, { method: 'POST', body: fd });
+      toast('صفحات دفترچه با موفقیت آپلود و اضافه شد 📝', 'success');
+      setStatus('saved','✓ آپلود شد');
+      setTimeout(() => location.reload(), 500);
+    } catch(err) { toast(err.error || 'خطا در آپلود عکس', 'error'); setStatus('saved','آماده'); }
+    e.target.value = '';
+  });
+
+  thumbsGrid?.addEventListener('click', async e => {
+    const bDel = e.target.closest('.remove-sheet-item-btn'); if (!bDel) return;
+    const item = bDel.closest('.sheet-thumb-item');
+    const path = item.dataset.spath;
+    if (!confirm('آیا از حذف این صفحه مطمئنی؟')) return;
+
+    setStatus('saving','در حال حذف…');
+    try {
+      await api(API, { method: 'POST', body: { action: 'remove_sheet_item', exam_id: examId, sheet_path: path } });
+      item.remove();
+      toast('صفحه حذف شد', 'success');
+      setStatus('saved','✓ آماده');
+    } catch(err) { toast(err.error || 'خطا در حذف', 'error'); setStatus('saved','آماده'); }
+  });
+
+  // Interactive UI for 100 Bubble Clicking Key Grid
+  const quickKeyInput  = document.getElementById('quickKeyInput');
+  const bubbleStudio   = document.querySelector('.bubble-grid-studio');
+  const keyBadge       = document.getElementById('keyQCountBadge');
+
+  function syncKeyInputToBubbles() {
+    let kStr = '';
+    bubbleStudio?.querySelectorAll('.bg-item').forEach(item => {
+      const activeOpt = item.querySelector('.bubble-btn.active')?.dataset.opt || '0';
+      kStr += activeOpt;
+    });
+    if(quickKeyInput) quickKeyInput.value = kStr.replace(/0+$/, ''); // trim trailing untouched zeros
+    if(keyBadge) keyBadge.textContent = faNum(kStr.replace(/0+$/, '').length) + ' سوال';
+  }
+
+  function syncBubblesToKeyInput() {
+    const val = (quickKeyInput?.value || '').replace(/[^1-4]/g, '');
+    if(keyBadge) keyBadge.textContent = faNum(val.length) + ' سوال';
+    
+    // اطمینان از وجود کافی آیتم حباب
+    const currItems = bubbleStudio?.querySelectorAll('.bg-item') || [];
+    if (val.length > currItems.length) {
+      appendNewBubbles(val.length - currItems.length);
+    }
+
+    bubbleStudio?.querySelectorAll('.bg-item').forEach((item, idx) => {
+      const charVal = val[idx];
+      item.querySelectorAll('.bubble-btn').forEach(btn => {
+        const isOpt = btn.dataset.opt === charVal;
+        btn.classList.toggle('active', isOpt);
+        btn.style.background = isOpt ? 'var(--gold)' : 'var(--surface-2)';
+        btn.style.color      = isOpt ? '#000'        : 'var(--text-2)';
+      });
+    });
+  }
+
+  quickKeyInput?.addEventListener('input', syncBubblesToKeyInput);
+
+  bubbleStudio?.addEventListener('click', e => {
+    const btn = e.target.closest('.bubble-btn'); if (!btn) return;
+    const parent = btn.closest('.bg-item');
+    parent.querySelectorAll('.bubble-btn').forEach(b => {
+      b.classList.remove('active');
+      b.style.background = 'var(--surface-2)';
+      b.style.color      = 'var(--text-2)';
+    });
+    btn.classList.add('active');
+    btn.style.background = 'var(--gold)';
+    btn.style.color      = '#000';
+    syncKeyInputToBubbles();
+  });
+
+  function appendNewBubbles(count) {
+    if (!bubbleStudio) return;
+    const startIdx = bubbleStudio.querySelectorAll('.bg-item').length + 1;
+    let html = '';
+    for (let qi = startIdx; qi < startIdx + count; qi++) {
+      html += `<div class="bg-item" data-qnum="${qi}" style="background:var(--surface-1);padding:8px;border-radius:8px;display:flex;flex-direction:column;align-items:center;border:1px solid var(--border-soft)">
+        <span style="font-size:.75rem;color:var(--text-3);font-weight:bold;margin-bottom:4px">Q${qi}</span>
+        <div class="flex gap-1">
+          <button type="button" class="bubble-btn" data-opt="1" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">1</button>
+          <button type="button" class="bubble-btn" data-opt="2" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">2</button>
+          <button type="button" class="bubble-btn" data-opt="3" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">3</button>
+          <button type="button" class="bubble-btn" data-opt="4" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">4</button>
+        </div>
+      </div>`;
+    }
+    bubbleStudio.insertAdjacentHTML('beforeend', html);
+  }
+
+  document.getElementById('add10BubblesBtn')?.addEventListener('click', () => {
+    appendNewBubbles(10);
+    bubbleStudio.scrollTop = bubbleStudio.scrollHeight;
+  });
+
+  document.getElementById('saveQuickSheetSuiteBtn')?.addEventListener('click', async function() {
+    const answerKey = quickKeyInput ? quickKeyInput.value.replace(/[^1-4]/g, '') : '';
+    if (!answerKey) { toast('لطفاً پاسخنامه کلیدی را وارد کنید یا روی حباب‌ها کلیک کنید', 'error'); return; }
+    
+    this.disabled = true; this.innerHTML = '<span class="spinner"></span> در حال ساخت سوالات…';
+    const sheetPath = previewImg ? previewImg.getAttribute('src').replace(/^.*uploads\//, 'uploads/') : '';
+
+    try {
+      const d = await api(API, { method: 'POST', body: { action: 'quick_sheet_generate', exam_id: examId, sheet_path: sheetPath, answer_key: answerKey } });
+      toast(`آزمون تصویرمحور با موفقیت ساخته شد (${faNum(d.q_count)} سوال) 🎉`, 'success');
+      setTimeout(() => location.reload(), 600);
+    } catch(err) {
+      toast(err.error || 'خطا در ثبت نهایی آزمون', 'error');
+      this.disabled = false; this.innerHTML = '✓ ثبت نهایی و ساخت سوالات';
+    }
+  });
+
+  /* =================================================================
+     STANDARD STUDIO: traditional DOM question cards
+     ================================================================= */
   function collectQuestions(){
     const out=[];
     document.querySelectorAll('.q-card').forEach(card=>{
@@ -114,9 +274,9 @@
     });
     return out;
   }
-  /* ---- 5-second autosave of dirty questions ---- */
+
   async function autosave(){
-    if(!examId) return;
+    if(!examId || root.dataset.mode !== 'standard') return;
     if(metaDirty){ await saveMeta(); }
     if(dirty.size===0) return;
     const all=collectQuestions();
@@ -125,21 +285,19 @@
     setStatus('saving','در حال ذخیره…');
     try{
       await api(API,{method:'POST',body:{action:'autosave',exam_id:examId,questions:payload}});
-      dirty.clear(); setStatus('saved','همه‌چیز ذخیره شد · '+faNum(new Date().toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})));
-    }catch(e){ setStatus('saved','ذخیره ناموفق — دوباره تلاش می‌شود'); }
+      dirty.clear(); setStatus('saved','✓ ذخیره شد · '+faNum(new Date().toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'})));
+    }catch(e){ setStatus('saved','ذخیره ناموفق'); }
   }
   setInterval(autosave, 5000);
-  window.addEventListener('beforeunload',(e)=>{ if(dirty.size>0||metaDirty){ e.preventDefault(); e.returnValue=''; } });
 
-  /* ---- mark dirty on any question edit ---- */
   root.addEventListener('input',(e)=>{
     const card=e.target.closest('.q-card');
-    if(card){ dirty.add(parseInt(card.dataset.question)); setStatus('saving','تغییرات ذخیره نشده…');
+    if(card && root.dataset.mode === 'standard'){
+      dirty.add(parseInt(card.dataset.question)); setStatus('saving','تغییرات ذخیره‌نشده…');
       if(e.target.matches('.q-text')) grow(e.target);
     }
   });
 
-  /* ---- correct option toggle ---- */
   root.addEventListener('change',(e)=>{
     if(e.target.matches('[data-correct]')){
       const card=e.target.closest('.q-card');
@@ -149,7 +307,6 @@
     }
   });
 
-  /* ---- add section (both buttons) ---- */
   async function addSection(){
     if(!examId){ await saveMeta(); if(!examId){ toast('ابتدا عنوان آزمون را وارد کنید','error'); return; } }
     try{
@@ -166,7 +323,6 @@
   document.getElementById('addSectionBtn')?.addEventListener('click',addSection);
   document.getElementById('addSectionBtn2')?.addEventListener('click',addSection);
 
-  /* ---- section name/duration save ---- */
   let secTimer={};
   root.addEventListener('input',(e)=>{
     const sec=e.target.closest('.exam-section'); if(!sec) return;
@@ -178,7 +334,6 @@
     }
   });
 
-  /* ---- delete section ---- */
   root.addEventListener('click',async(e)=>{
     const b=e.target.closest('[data-del-section]'); if(!b) return;
     const sec=b.closest('.exam-section');
@@ -188,7 +343,6 @@
     }catch(err){ toast(err.error||'خطا','error'); }
   });
 
-  /* ---- add question ---- */
   root.addEventListener('click',async(e)=>{
     const b=e.target.closest('[data-add-question]'); if(!b) return;
     const sec=b.closest('.exam-section');
@@ -204,7 +358,6 @@
     }catch(err){ toast(err.error||'خطا','error'); }
   });
 
-  /* ---- delete question ---- */
   root.addEventListener('click',async(e)=>{
     const b=e.target.closest('[data-del-question]'); if(!b) return;
     const card=b.closest('.q-card'); const sec=card.closest('.exam-section');
@@ -215,7 +368,6 @@
     }catch(err){ toast(err.error||'خطا','error'); }
   });
 
-  /* ---- Enter in last option => add new question (fast entry) ---- */
   root.addEventListener('keydown',(e)=>{
     if(e.key==='Enter' && e.target.matches('[data-opt-text="4"]')){
       e.preventDefault();
@@ -224,7 +376,6 @@
     }
   });
 
-  /* ---- image upload ---- */
   root.addEventListener('change',async(e)=>{
     if(!e.target.matches('[data-q-img]')) return;
     const file=e.target.files[0]; if(!file) return;
@@ -240,6 +391,7 @@
     }catch(err){ toast(err.error||'خطا در آپلود','error'); }
     e.target.value='';
   });
+
   root.addEventListener('click',async(e)=>{
     const b=e.target.closest('[data-q-img-remove]'); if(!b) return;
     const card=b.closest('.q-card');
@@ -248,23 +400,23 @@
     }catch(err){ toast(err.error||'خطا','error'); }
   });
 
-  /* ---- publish ---- */
-  document.getElementById('publishBtn').addEventListener('click',async function(){
+  document.getElementById('studioPublishBtn')?.addEventListener('click',async function(){
     if(dirty.size||metaDirty) await autosave();
     const cur=this.dataset.status;
     const next=cur==='published'?'draft':'published';
     try{
       const d=await api(API,{method:'POST',body:{action:'set_status',exam_id:examId,status:next}});
       this.dataset.status=d.status;
-      if(d.status==='published'){ this.innerHTML='پیش‌نویس کن'; toast('آزمون منتشر شد و به دانش‌آموزان اطلاع داده شد ✅','success'); }
-      else { this.innerHTML='انتشار آزمون'; toast('آزمون به پیش‌نویس بازگشت','info'); }
-    }catch(err){ toast(err.error||'خطا','error'); }
+      if(d.status==='published'){ this.innerHTML='✓ لغو انتشار'; toast('آزمون به‌طور نهایی منتشر شد 🚀','success'); }
+      else { this.innerHTML='🚀 انتشار نهایی آزمون'; toast('آزمون به حالت پیش‌نویس بازگشت','info'); }
+    }catch(err){ toast(err.error||'خطا در انتشار','error'); }
   });
 
-  /* ---- helpers: counts/renumber ---- */
   function updateCounts(){
-    document.getElementById('totalSec').textContent=faNum(document.querySelectorAll('.exam-section').length);
-    document.getElementById('totalQ').textContent=faNum(document.querySelectorAll('.q-card').length);
+    const ts = document.getElementById('totalSec');
+    const tq = document.getElementById('totalQ');
+    if(ts) ts.textContent=faNum(document.querySelectorAll('.exam-section').length);
+    if(tq) tq.textContent=faNum(document.querySelectorAll('.q-card').length);
     document.querySelectorAll('.exam-section').forEach(sec=>{
       const c=sec.querySelectorAll('.q-card').length;
       sec.querySelector('.sec-count').textContent=faNum(c)+' سوال';
@@ -272,7 +424,6 @@
   }
   function renumber(sec){ sec.querySelectorAll('.q-card .q-num').forEach((n,i)=>n.textContent=faNum(i+1)); }
 
-  /* ---- HTML templates (mirror of PHP) ---- */
   function sectionHTML(id,name,dur){
     return `<div class="exam-section" data-section="${id}">
       <div class="section-head">

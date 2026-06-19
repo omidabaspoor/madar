@@ -95,6 +95,21 @@ case 'time': {
     json_out(['ok'=>true,'remain'=>$remain]);
 }
 
+case 'save_diagnostic': {
+    $attemptId = (int)($in['attempt_id'] ?? 0);
+    $qid = (int)($in['question_id'] ?? 0);
+    $a = my_attempt($attemptId, $me);
+    if (!$a) json_out(['ok'=>false, 'error'=>'کارنامه یافت نشد'], 404);
+    
+    $reason   = trim((string)($in['diagnostic_reason'] ?? ''));
+    $takeaway = trim((string)($in['diagnostic_takeaway'] ?? ''));
+
+    db()->prepare('UPDATE exam_answers SET diagnostic_reason=?, diagnostic_takeaway=? WHERE attempt_id=? AND question_id=?')
+        ->execute([$reason ?: null, $takeaway ?: null, $attemptId, $qid]);
+
+    json_out(['ok'=>true]);
+}
+
 case 'submit': {
     $attemptId = (int)($in['attempt_id'] ?? 0);
     $a = my_attempt($attemptId, $me);

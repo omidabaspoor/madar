@@ -46,6 +46,7 @@ function icon(string $name, int $size = 22, string $cls = ''): string
         'arrow-right'=>'<path d="M5 12h14M12 5l7 7-7 7"/>',
         'chevron-down'=>'<path d="M6 9l6 6 6-6"/>',
         'chevron-left'=>'<path d="M15 18l-6-6 6-6"/>',
+        'chevron-right'=>'<path d="M9 18l6-6-6-6"/>',
         'sparkles'  => '<path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8L12 3z"/><path d="M19 14l.8 1.8L21.5 17l-1.7.8L19 19.5 18.2 17.8 16.5 17l1.7-.8z"/>',
         'target'    => '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
         'flag'      => '<path d="M4 22V4M4 4h12l-2 4 2 4H4"/>',

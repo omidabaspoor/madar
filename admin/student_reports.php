@@ -60,7 +60,24 @@ panel_start('گزارش حرفه‌ای', $student['full_name'].' · '.report_ty
   <div class="modal-backdrop" id="insightModal<?= (int)$r['id'] ?>">
     <div class="modal insight-modal">
       <div class="modal-head"><h3><?= icon('sparkles',20) ?> تحلیل هوشمند مَدار <span class="beta-pill">بتا</span></h3><button class="modal-close" data-close><?= icon('close',18) ?></button></div>
-      <div class="insight-score-head"><b><?= fa_num($an['overall']) ?>٪</b><span><?= e($an['overall_label']) ?></span></div>
+      <div class="insight-score-head" style="display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:center;background:var(--surface-2);border:1px solid var(--border-soft);padding:18px 24px;border-radius:var(--r-lg);margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:16px">
+          <div style="background:var(--gold-glass);color:var(--gold);width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:900;box-shadow:0 0 16px rgba(217,178,95,0.2)">
+            <?= fa_num($an['overall']) ?>٪
+          </div>
+          <div style="text-align:r">
+            <div style="font-size:.78rem;color:var(--gold);text-transform:uppercase;letter-spacing:1px;font-weight:700">شاخص بازدهی و کیفیت مطالعاتی</div>
+            <div style="font-size:1.1rem;font-weight:900;color:var(--text-1);margin-top:2px">نمره ارزیابی کلی سیستم</div>
+          </div>
+        </div>
+        
+        <div style="text-align:l">
+          <div style="font-size:.78rem;color:var(--text-3)">ارزیابی وضعیت برنامه:</div>
+          <span class="badge badge-gold" style="font-size:1rem;padding:6px 16px;font-weight:800;margin-top:4px;display:inline-block">
+            <?= e($an['overall_label']) ?>
+          </span>
+        </div>
+      </div>
       <p class="insight-summary"><?= e($an['summary']) ?></p>
       <div class="insight-mini-row"><?php foreach(['execution'=>'اجرا','consistency'=>'ثبات','tests'=>'تست','recovery'=>'خواب/انرژی','subject_balance'=>'تعادل','burnout_risk'=>'ریسک افت'] as $k=>$lbl): ?><span><?= e($lbl) ?>: <b><?= fa_num($an['scores'][$k]??0) ?>٪</b></span><?php endforeach; ?></div>
       <?php if($an['alerts']): ?><div class="insight-alerts compact"><?php foreach($an['alerts'] as $al): ?><div class="ia <?= e($al['level']) ?>"><b><?= e($al['title']) ?></b><span><?= e($al['text']) ?></span></div><?php endforeach; ?></div><?php endif; ?>

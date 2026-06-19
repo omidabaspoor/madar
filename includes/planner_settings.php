@@ -19,6 +19,11 @@ function planner_settings_defaults(): array {
         'insight_enabled'     => '1',           // نمایش تحلیل هوشمند
         'review_enabled'      => '1',           // سیستم مرور فاصله‌دار
         'web_notifications'   => '1',           // پیشنهاد اعلان وب‌اپ
+        'achievements_enabled'=> '1',           // سیستم گیمیفیکیشن و دستاوردها
+        'mood_logging_enabled'=> '1',           // ثبت روزانه حال و ایموجی روحیه
+        'taraz_samurai_enabled'=> '1',          // ترازسنج کشوری و کنکوری مَدار
+        'precision_samurai_enabled'=> '1',      // آسیب‌شناسی تعاملی و تحلیل ضریب دقت
+        'auto_mark_missed_enabled'=> '1',       // قرمزکردن خودکار تسک‌های منقضی‌شده
     ];
 }
 
@@ -98,7 +103,7 @@ function save_planner_settings(int $advisorId, array $in): void {
         'smart_autofill'   => ['0','1'],
     ];
     $numeric  = ['default_duration','default_test_count','special_reading_min','special_exam_min'];
-    $checkbox = ['smart_autofill','insight_enabled','review_enabled','web_notifications']; // چک‌باکس‌ها: نبودشان در POST یعنی خاموش
+    $checkbox = ['smart_autofill','insight_enabled','review_enabled','web_notifications','achievements_enabled','mood_logging_enabled','taraz_samurai_enabled','precision_samurai_enabled','auto_mark_missed_enabled']; // چک‌باکس‌ها: نبودشان در POST یعنی خاموش
     foreach ($allowed as $k => $def) {
         if (in_array($k, $checkbox, true)) {
             // اگر چک‌باکس تیک نخورده باشد اصلاً در POST نمی‌آید → '0'

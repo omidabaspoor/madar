@@ -330,13 +330,13 @@ function report_advanced_aggregate(int $studentId, string $type, string $start, 
 }
 function report_trend_label(float $cur, float $prev): string
 {
-    if ($cur <= 0 && $prev <= 0) return 'بدون اجرای مؤثر در دو بازه';
-    if ($cur <= 0 && $prev > 0) return 'افت کامل نسبت به بازه قبل';
-    if ($cur > 0 && $prev <= 0) return 'شروع دوباره نسبت به بازه قبل';
+    if ($cur <= 0 && $prev <= 0) return 'در دو بازه اخیر اجرای مؤثری ثبت نشده است';
+    if ($cur <= 0 && $prev > 0) return 'متأسفانه نسبت به بازه قبل افت کامل داشته‌اید';
+    if ($cur > 0 && $prev <= 0) return 'بازگشت موفق و شروع قدرتمند نسبت به بازه قبل';
     $d = $cur - $prev;
-    if ($d >= 8) return 'رو به رشد';
-    if ($d <= -8) return 'رو به افت';
-    return 'تقریباً پایدار';
+    if ($d >= 8) return 'پیشرفت محسوس و رو به رشد';
+    if ($d <= -8) return 'روند کاهشی و نیازمند مراقبت';
+    return 'روند باثبات و پایدار';
 }
 
 function report_pick(array $items, string $seed): string
@@ -525,24 +525,35 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
 
     $summaryBits = [];
     if ($progress <= 0) {
-        $summaryBits[] = 'در این بازه اجرای مؤثر ثبت نشده و وضعیت نیازمند اقدام فوری است.';
-        if ($pendingRate >= 80) $summaryBits[] = 'بخش اصلی تسک‌ها هنوز تعیین وضعیت نشده‌اند.';
-        if ($missedRate >= 50) $summaryBits[] = 'تعداد تسک‌های قرمز بالاست.';
+        $summaryBits[] = 'در این بازه اجرای مؤثری ثبت نشده و وضعیت نیازمند اقدام و پیگیری فوری است.';
+        if ($pendingRate >= 80) $summaryBits[] = 'بخش اصلی تسک‌های برنامه هنوز تعیین وضعیت نشده‌اند.';
+        if ($missedRate >= 50) $summaryBits[] = 'تعداد تسک‌های قرمز بسیار بالاست.';
     } else {
-        $summaryBits[] = 'اجرای برنامه '.report_score_label($scores['execution']).' بوده است.';
-        $summaryBits[] = 'روند نسبت به بازه قبل '.report_trend_label($progress,$prevProgress).' است.';
+        $summaryBits[] = 'بازدهی اجرای برنامه در این بازه «'.report_score_label($scores['execution']).'» بوده است.';
+        $summaryBits[] = 'مقایسه با عملکرد بازه قبل نشان‌دهنده‌ی «'.report_trend_label($progress,$prevProgress).'» است.';
     }
-    if ($type === 'monthly' && !empty($longTerm['avg'])) $summaryBits[] = 'نسبت به میانگین '.fa_num($longTerm['months']).' ماه اخیر: '.$longTerm['label'].'.';
-    if ($weakSubjects) $summaryBits[] = 'نیازمند توجه اصلی: '.$weakSubjects[0]['name'].'.';
-    if ($strongSubjects && $progress > 0) $summaryBits[] = 'نقطه قوت: '.$strongSubjects[0]['name'].'.';
-    $summaryBits[] = 'ریسک افت '.report_risk_label($burnout).' ارزیابی می‌شود.';
+    if ($type === 'monthly' && !empty($longTerm['avg'])) $summaryBits[] = 'وضعیت کلی نسبت به میانگین '.fa_num($longTerm['months']).' ماه اخیر: '.$longTerm['label'].'.';
+    
+    // ارزیابی هوشمند تمامی دروس ضعیف (به‌جای فقط یک درس)
+    if ($weakSubjects) {
+        $weakNames = array_map(fn($w) => $w['name'], array_slice($weakSubjects, 0, 5));
+        $summaryBits[] = 'دروس نیازمند تمرکز، رفع اشکال و تست‌زنیِ بیشتر: ' . implode('، ', $weakNames) . '.';
+    }
+    if ($strongSubjects && $progress > 0) {
+        $strongNames = array_map(fn($s) => $s['name'], array_slice($strongSubjects, 0, 3));
+        $summaryBits[] = 'نقاط قوت و پایدار مطالعاتی: ' . implode('، ', $strongNames) . '.';
+    }
+    $summaryBits[] = 'ریسک فرسودگی یا افت عملکرد در حال حاضر «'.report_risk_label($burnout).'» ارزیابی می‌شود.';
 
     $actionPlan = [];
-    if ($weakSubjects) $actionPlan[] = 'اولویت ۱: '. $weakSubjects[0]['name'] .' با یک واحد سبک + تست آموزشی';
-    if ($targetTests > 0 && $testsDone < $targetTests) $actionPlan[] = 'اولویت ۲: جبران تست‌ها در بسته‌های ۲۰ تا ۳۰تایی، نه یک‌جا';
-    if ($reviewTasks <= 0 && $progress > 0) $actionPlan[] = 'اولویت ۳: ساخت مرور فاصله‌دار برای مباحث خواندنی';
-    if ($burnout >= 55) $actionPlan[] = 'اولویت کنترل فشار: یک بازه خواب/استراحت ثابت قبل از برنامه سنگین';
-    if (!$actionPlan) $actionPlan[] = 'حفظ روند فعلی + یک بهبود کوچک در تست زمان‌دار یا تحلیل غلط‌ها';
+    if ($weakSubjects) {
+        $weakNames = array_map(fn($w) => $w['name'], array_slice($weakSubjects, 0, 3));
+        $actionPlan[] = 'اولویت ۱: تقویت فوری دروس ('. implode('، ', $weakNames) . ') با پارت‌های کوتاه و پیوسته + تست آموزشی';
+    }
+    if ($targetTests > 0 && $testsDone < $targetTests) $actionPlan[] = 'اولویت ۲: جبران کمبود تست‌ها در بسته‌های کوچک ۲۰ تا ۳۰تایی نه به‌صورت یک‌جا';
+    if ($reviewTasks <= 0 && $progress > 0) $actionPlan[] = 'اولویت ۳: زمان‌بندی مرورهای فاصله‌دار برای مطالب خواندنی و فرّار';
+    if ($burnout >= 55) $actionPlan[] = 'اولویت کنترل فشار: تنظیم ساعت خواب و استراحت کافی قبل از شروع پارت‌های سنگین';
+    if (!$actionPlan) $actionPlan[] = 'حفظ استمرار فعلی + افزایش گام‌به‌گام تست‌های زمان‌دار و تحلیل دقیق آزمون‌ها';
 
     return [
         'beta'=>true,

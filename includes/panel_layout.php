@@ -43,7 +43,7 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
             ['reviews','مرورها','repeat','student/reviews.php'],
             ['exams','آزمون','clipboard','student/exams.php'],
             ['progress','گزارش','chart','student/progress.php'],
-            ['reports','گزارش‌دهی','edit','student/reports.php?type=weekly'],
+            ['reports','گزارش پیشرفته','edit','student/reports.php?type=weekly'],
             ['messages','پیام','message','student/messages.php'],
         ],
         'other' => [

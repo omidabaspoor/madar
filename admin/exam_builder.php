@@ -17,133 +17,249 @@ $subjects = all_subjects();
 $qBySection = [];
 foreach ($questions as $q) $qBySection[(int)$q['section_id']][] = $q;
 
-// مرحله‌ی شروع: اگر آزمون سوال دارد، مستقیم مرحله ۲
+// مرحله‌ی شروع: اگر آزمون از قبل سوال دارد، مستقیم مرحله ۲
 $startStep = ($exam && count($questions) > 0) ? 2 : 1;
+$mode = $exam['creation_mode'] ?? 'quick_sheet';
+if ($mode === 'ai_bulk') $mode = 'quick_sheet';
 
-panel_start($exam ? 'ویرایش آزمون' : 'آزمون جدید', '', 'admin', 'exams', ['builder.css','student.css']);
+// استخراج صفحات چندتایی آپلودشده
+$sheetArr = $exam['sheet_paths_json'] ? (json_decode($exam['sheet_paths_json'], true) ?: []) : [];
+if (($exam['sheet_path']??null) && !in_array($exam['sheet_path'], $sheetArr, true)) {
+    array_unshift($sheetArr, $exam['sheet_path']);
+}
+
+panel_start($exam ? 'ویرایش آزمون' : 'طراحی آزمون جدید', '', 'admin', 'exams', ['builder.css','student.css']);
 ?>
-<div class="exam-builder" id="examBuilder" data-exam="<?= $examId ?>" data-step="<?= $startStep ?>">
+<div class="exam-builder" id="examBuilder" data-exam="<?= $examId ?>" data-step="<?= $startStep ?>" data-mode="<?= e($mode) ?>">
 
-  <!-- ===== header: back + stepper + save status ===== -->
-  <div class="between wrap gap-3 mb-4">
-    <a href="<?= url('admin/exams.php') ?>" class="btn btn-ghost btn-sm"><?= icon('arrow-right',16) ?> آزمون‌ها</a>
-    <div class="stepper">
-      <button class="step" data-step-to="1"><span class="step-n">۱</span><span class="step-lbl">تنظیمات</span></button>
-      <span class="step-line"></span>
-      <button class="step" data-step-to="2"><span class="step-n">۲</span><span class="step-lbl">سوالات</span></button>
+  <!-- ===== Header ===== -->
+  <div class="between wrap gap-3 mb-4" style="align-items:center">
+    <a href="<?= url('admin/exams.php') ?>" class="btn btn-ghost btn-sm flex gap-2" style="align-items:center"><?= icon('arrow-right',16) ?> بازگشت به آزمون‌ها</a>
+    <div class="stepper" style="display:flex;align-items:center;gap:12px;background:var(--surface-2);padding:4px 16px;border-radius:var(--r-pill);border:1px solid var(--border-soft)">
+      <button class="step <?= $startStep===1?'active':'' ?>" data-step-to="1" style="border:none;background:none;color:inherit;cursor:pointer;font-weight:800"><span class="step-n" style="background:var(--gold);color:#000;padding:2px 8px;border-radius:50%;margin-left:6px">۱</span><span class="step-lbl">تنظیمات و شیوه طراحی</span></button>
+      <span class="step-line" style="width:24px;height:2px;background:var(--border-soft)"></span>
+      <button class="step <?= $startStep===2?'active':'' ?>" data-step-to="2" style="border:none;background:none;color:inherit;cursor:pointer;font-weight:800"><span class="step-n" style="background:var(--sage);color:#000;padding:2px 8px;border-radius:50%;margin-left:6px">۲</span><span class="step-lbl">ورود سوالات و پاسخنامه</span></button>
     </div>
-    <span class="save-status saved" id="saveStatus"><?= icon('check-circle',16) ?> ذخیره خودکار</span>
+    <span class="save-status saved badge badge-sage" id="saveStatus" style="padding:6px 14px"><?= icon('check-circle',15) ?> آماده‌ی کار</span>
   </div>
 
   <!-- =========================================================
-       STEP 1 — settings
+       STEP 1 — Settings & Mode Selector
        ========================================================= -->
-  <div class="builder-step" data-step="1">
-    <div class="panel">
-      <div class="step-intro"><span class="icon-tile"><?= icon('clipboard',22) ?></span>
-        <div><h3 style="font-size:1.15rem">گام ۱ · تنظیمات آزمون</h3><p class="muted" style="font-size:.85rem">عنوان و نوع آزمون را مشخص کن. بقیه تنظیمات حالت پیش‌فرض دارند.</p></div>
+  <div class="builder-step <?= $startStep===1?'':'hidden' ?>" data-step="1">
+    <div class="panel" style="background:var(--surface-1);border:1px solid var(--border-soft);padding:32px;border-radius:var(--r-lg)">
+      <div class="step-intro flex gap-3 mb-4" style="align-items:center;border-bottom:1px solid var(--surface-2);padding-bottom:20px">
+        <span class="icon-tile" style="background:var(--gold-glass);color:var(--gold);width:56px;height:56px;font-size:1.6rem"><?= icon('clipboard',28) ?></span>
+        <div><h3 style="font-size:1.3rem;font-weight:900;color:var(--text-1)">گام ۱ · تنظیمات و انتخاب شیوه طراحی</h3><p class="muted mt-1" style="font-size:.9rem">عنوان آزمون و روش ساخت سوالات را انتخاب کنید؛ بقیه‌ی موارد حالت پیش‌فرض دارند.</p></div>
       </div>
 
       <form id="metaForm">
-        <div class="field"><label>عنوان آزمون *</label><input class="input input-lg" name="title" id="m_title" value="<?= e($exam['title'] ?? '') ?>" placeholder="مثلاً آزمون جامع شماره ۱"></div>
+        <div class="field mb-4">
+          <label style="font-size:1.05rem;font-weight:800;color:var(--gold-light)">عنوان آزمون *</label>
+          <input class="input input-lg" name="title" id="m_title" value="<?= e($exam['title'] ?? '') ?>" placeholder="مثلاً آزمون جامع شماره ۱ (شیمی و فیزیک)" style="font-size:1.1rem;font-weight:800">
+        </div>
 
-        <div class="field"><label>نوع آزمون</label>
-          <div class="type-cards">
-            <label class="type-card <?= ($exam['exam_type']??'single')==='single'?'active':'' ?>">
-              <input type="radio" name="exam_type" value="single" <?= ($exam['exam_type']??'single')==='single'?'checked':'' ?>>
-              <span class="tc-ico"><?= icon('book',22) ?></span>
-              <span class="tc-title">تکی</span>
-              <span class="tc-desc">فقط یک درس</span>
+        <div class="field mb-4">
+          <label style="font-size:1.05rem;font-weight:800;color:var(--text-1);margin-bottom:12px;display:block">شیوه طراحی و ورود سوالات *</label>
+          <div class="grid gap-3" style="grid-template-columns:repeat(auto-fit, minmax(280px, 1fr))">
+            
+            <label class="panel mode-card <?= $mode==='quick_sheet'?'active':'' ?>" style="cursor:pointer;border:2px solid <?= $mode==='quick_sheet'?'var(--gold)':'var(--border-soft)' ?>;background:<?= $mode==='quick_sheet'?'var(--surface-2)':'var(--surface-1)' ?>;transition:all 0.2s">
+              <input type="radio" name="creation_mode" value="quick_sheet" <?= $mode==='quick_sheet'?'checked':'' ?> hidden>
+              <div class="flex gap-3" style="align-items:center">
+                <span class="icon-tile" style="background:var(--gold-glass);color:var(--gold);width:48px;height:48px"><?= icon('image',24) ?></span>
+                <div>
+                  <h4 style="font-size:1.1rem;font-weight:900;color:var(--gold-light)">آزمون تصویرمحور سریع</h4>
+                  <p class="muted mt-1" style="font-size:.82rem;line-height:1.5">آپلود عکس دفترچه سوالات کنکور + ورود سریع کلیدها (بهترین روش برای آزمون‌های ۱۰۰ سوالی)</p>
+                </div>
+              </div>
             </label>
-            <label class="type-card <?= ($exam['exam_type']??'')==='comprehensive'?'active':'' ?>">
-              <input type="radio" name="exam_type" value="comprehensive" <?= ($exam['exam_type']??'')==='comprehensive'?'checked':'' ?>>
-              <span class="tc-ico"><?= icon('grid',22) ?></span>
-              <span class="tc-title">جامع</span>
-              <span class="tc-desc">چند درس پشت سر هم</span>
+
+            <label class="panel mode-card <?= $mode==='standard'?'active':'' ?>" style="cursor:pointer;border:2px solid <?= $mode==='standard'?'var(--cyan)':'var(--border-soft)' ?>;background:<?= $mode==='standard'?'var(--surface-2)':'var(--surface-1)' ?>;transition:all 0.2s">
+              <input type="radio" name="creation_mode" value="standard" <?= $mode==='standard'?'checked':'' ?> hidden>
+              <div class="flex gap-3" style="align-items:center">
+                <span class="icon-tile" style="background:var(--cyan-glass);color:var(--cyan);width:48px;height:48px"><?= icon('edit',24) ?></span>
+                <div>
+                  <h4 style="font-size:1.1rem;font-weight:900;color:#a0d2eb">طراحی تکی استاندارد</h4>
+                  <p class="muted mt-1" style="font-size:.82rem;line-height:1.5">ساخت بخش‌های مجزا و تایپ دستی سوالات و گزینه‌ها همراه با آپلود عکس مجزا</p>
+                </div>
+              </div>
             </label>
+
           </div>
         </div>
 
-        <div class="field"><label>توضیحات <span class="muted">(اختیاری)</span></label><input class="input" name="description" id="m_desc" value="<?= e($exam['description'] ?? '') ?>" placeholder="مثلاً ویژه‌ی فصل‌های اول"></div>
+        <div class="grid gap-3 mb-4" style="grid-template-columns:1fr 1fr">
+          <div class="field"><label>نوع ساختار آزمون</label>
+            <div class="flex gap-3 mt-1">
+              <label class="badge <?= ($exam['exam_type']??'single')==='single'?'badge-gold':'badge' ?>" style="padding:10px 20px;cursor:pointer;font-weight:800"><input type="radio" name="exam_type" value="single" <?= ($exam['exam_type']??'single')==='single'?'checked':'' ?>> تکی (یک درس)</label>
+              <label class="badge <?= ($exam['exam_type']??'')==='comprehensive'?'badge-gold':'badge' ?>" style="padding:10px 20px;cursor:pointer;font-weight:800"><input type="radio" name="exam_type" value="comprehensive" <?= ($exam['exam_type']??'')==='comprehensive'?'checked':'' ?>> جامع (چند درس)</label>
+            </div>
+          </div>
+          <div class="field"><label>توضیحات کوتاه <span class="muted">(اختیاری)</span></label><input class="input" name="description" id="m_desc" value="<?= e($exam['description'] ?? '') ?>" placeholder="مثلاً ویژه‌ی جمع‌بندی نیمسال اول"></div>
+        </div>
 
-        <div class="grid gap-3" style="grid-template-columns:1fr 1fr">
+        <div class="grid gap-3 mb-4" style="grid-template-columns:1fr 1fr">
           <div class="field"><label>نحوه‌ی زمان‌بندی</label>
             <select class="select" name="timing_mode" id="m_timing">
-              <option value="total" <?= ($exam['timing_mode']??'')==='total'?'selected':'' ?>>یک زمان برای کل آزمون</option>
-              <option value="per_section" <?= ($exam['timing_mode']??'')==='per_section'?'selected':'' ?>>زمان جداگانه برای هر درس</option>
+              <option value="total" <?= ($exam['timing_mode']??'')==='total'?'selected':'' ?>>یک زمان مشترک برای کل آزمون</option>
+              <option value="per_section" <?= ($exam['timing_mode']??'')==='per_section'?'selected':'' ?>>زمان‌بندی مجزا برای هر درس/بخش</option>
             </select>
           </div>
-          <div class="field" id="totalDurField"><label>زمان کل (دقیقه)</label><input class="input" type="number" min="1" name="duration_min" id="m_dur" value="<?= e($exam['duration_min'] ?? 60) ?>"></div>
+          <div class="field" id="totalDurField"><label>زمان کل آزمون (دقیقه)</label><input class="input" type="number" min="1" name="duration_min" id="m_dur" value="<?= e($exam['duration_min'] ?? 60) ?>"></div>
         </div>
 
-        <!-- advanced (collapsible) -->
-        <details class="adv-settings">
-          <summary><?= icon('settings',16) ?> تنظیمات پیشرفته (اختیاری)</summary>
-          <div class="adv-body">
-            <div class="field" style="max-width:320px"><label>بازه‌ی برگزاری <span class="muted">(اختیاری)</span></label>
+        <details class="adv-settings panel" style="background:var(--surface-2);border:1px solid var(--border-soft);padding:16px 20px;border-radius:var(--r-lg)">
+          <summary style="font-weight:800;cursor:pointer;color:var(--gold-light)"><?= icon('settings',16) ?> تنظیمات پیشرفته برگزاری (اختیاری)</summary>
+          <div class="adv-body grid gap-3 mt-4" style="grid-template-columns:1fr 1fr wrap">
+            <div class="field"><label>بازه‌ی مجاز شروع <span class="muted">(اختیاری)</span></label>
               <input class="input" type="datetime-local" name="start_at" id="m_start" value="<?= $exam && $exam['start_at'] ? date('Y-m-d\TH:i', strtotime($exam['start_at'])) : '' ?>">
-              <p class="help">اگر خالی باشد، آزمون بلافاصله در دسترس است.</p>
             </div>
-            <label class="toggle-row"><span><b>نمره منفی کنکوری</b><br><span class="muted" style="font-size:.78rem">هر ۳ غلط، یک درست را خنثی می‌کند</span></span>
+            <label class="toggle-row between" style="align-items:center;background:var(--surface-1);padding:12px;border-radius:8px"><span><b>نمره منفی کنکور</b><br><span class="muted" style="font-size:.78rem">هر ۳ غلط = ۱ درست خنثی</span></span>
               <label class="switch"><input type="checkbox" name="negative_marking" id="m_neg" value="1" <?= ($exam['negative_marking']??1)?'checked':'' ?>><span class="slider"></span></label>
             </label>
-            <label class="toggle-row"><span><b>نمایش پاسخنامه به دانش‌آموز</b><br><span class="muted" style="font-size:.78rem">بعد از پایان آزمون، پاسخ صحیح و تحلیل را ببیند</span></span>
+            <label class="toggle-row between" style="align-items:center;background:var(--surface-1);padding:12px;border-radius:8px"><span><b>نمایش پاسخنامه و تحلیل</b><br><span class="muted" style="font-size:.78rem">پس از پایان آزمون فعال شود</span></span>
               <label class="switch"><input type="checkbox" name="show_review" id="m_rev" value="1" <?= ($exam['show_review']??1)?'checked':'' ?>><span class="slider"></span></label>
-            </label>
-            <label class="toggle-row"><span><b>ترتیب تصادفی سوالات</b><br><span class="muted" style="font-size:.78rem">هر دانش‌آموز سوالات را با ترتیب متفاوت ببیند</span></span>
-              <label class="switch"><input type="checkbox" name="shuffle_questions" id="m_shuf" value="1" <?= ($exam['shuffle_questions']??0)?'checked':'' ?>><span class="slider"></span></label>
             </label>
           </div>
         </details>
       </form>
 
-      <div class="step-actions">
-        <button class="btn btn-gold btn-lg" id="toStep2Btn">ادامه: افزودن سوالات <?= icon('arrow-left',18) ?></button>
+      <div class="step-actions mt-4 text-l">
+        <button class="btn btn-gold btn-lg flex gap-2" id="toStep2Btn" style="padding:14px 36px;font-weight:900;font-size:1.1rem;display:inline-flex;align-items:center">
+          ثبت تنظیمات و ورود به استودیوی طراحی <?= icon('arrow-left',20) ?>
+        </button>
       </div>
     </div>
   </div>
 
   <!-- =========================================================
-       STEP 2 — questions
+       STEP 2 — Studio Suites
        ========================================================= -->
   <div class="builder-step <?= $startStep===2?'':'hidden' ?>" data-step="2">
-    <div class="step-intro panel" style="padding:16px 18px;margin-bottom:16px">
-      <span class="icon-tile sage"><?= icon('list',22) ?></span>
-      <div style="flex:1">
-        <h3 style="font-size:1.05rem"><?= icon('sparkles',16) ?> گام ۲ · افزودن سوالات</h3>
-        <p class="muted" style="font-size:.83rem">برای هر درس یک «بخش» بساز، بعد سوال اضافه کن. <b>نکته:</b> بعد از نوشتن گزینه‌ها، با زدن Enter سوال بعدی خودکار ساخته می‌شود.</p>
+    
+    <div class="step-intro panel flex gap-3 between mb-4 wrap" style="align-items:center;padding:16px 24px;background:var(--surface-2);border-radius:var(--r-lg)">
+      <div class="flex gap-3" style="align-items:center">
+        <span class="icon-tile sage"><?= icon('list',24) ?></span>
+        <div>
+          <h3 style="font-size:1.15rem;font-weight:900;color:var(--text-1)">گام ۲ · استودیوی ورود سوالات و پاسخنامه</h3>
+          <p class="muted mt-1" style="font-size:.85rem">حالت فعال: <b style="color:var(--gold-light)"><?= e(['quick_sheet'=>'آزمون تصویرمحور سریع','standard'=>'طراحی تکی استاندارد'][$mode] ?? 'سریع') ?></b></p>
+        </div>
       </div>
-      <button class="btn btn-ghost btn-sm" id="backToStep1"><?= icon('settings',15) ?> تنظیمات</button>
-    </div>
-
-    <div class="between wrap gap-3 mb-4">
-      <div class="exam-summary">
-        <span class="ps-item"><span class="v" id="totalQ"><?= fa_num(count($questions)) ?></span><span class="k">سوال</span></span>
-        <span class="ps-item"><span class="v" id="totalSec"><?= fa_num(count($sections)) ?></span><span class="k">درس</span></span>
-      </div>
+      
       <div class="flex gap-2 wrap">
-        <button class="btn btn-ghost" id="addSectionBtn"><?= icon('plus',16) ?> افزودن درس</button>
-        <button class="btn btn-sage" id="publishBtn" data-status="<?= e($exam['status'] ?? 'draft') ?>">
-          <?= ($exam['status']??'')==='published' ? icon('edit',16).' بازگشت به پیش‌نویس' : icon('rocket',16).' انتشار آزمون' ?>
+        <button class="btn btn-ghost btn-sm flex gap-1" id="backToStep1" style="align-items:center"><?= icon('settings',16) ?> تغییر تنظیمات</button>
+        <button class="btn btn-sage btn-sm flex gap-1" id="studioPublishBtn" data-status="<?= e($exam['status'] ?? 'draft') ?>" style="align-items:center;font-weight:900">
+          <?= ($exam['status']??'')==='published' ? icon('edit',16).' بازگشت به پیش‌نویس' : icon('rocket',16).' انتشار نهایی آزمون' ?>
         </button>
       </div>
     </div>
 
-    <div id="sectionsWrap">
-      <?php foreach ($sections as $sec): ?>
-      <?php require __DIR__ . '/_section_tpl.php'; ?>
-      <?php endforeach; ?>
+    <!-- 1. استودیوی آزمون تصویرمحور سریع (Multi-Image Studio) -->
+    <div class="studio-suite <?= $mode==='quick_sheet'?'':'hidden' ?>" id="suiteQuickSheet">
+      <div class="grid gap-4" style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr))">
+        
+        <!-- ستون آپلود چندین صفحه دفترچه -->
+        <div class="panel flex" style="flex-direction:column;justify-content:space-between;background:var(--surface-1);padding:24px;border-radius:var(--r-lg);min-height:100%;word-break:break-word">
+          <div>
+            <div class="between mb-3 wrap gap-2" style="align-items:center">
+              <h4 style="font-size:1.15rem;font-weight:900;color:var(--gold);display:flex;align-items:center;gap:8px">
+                <?= icon('image',20) ?> ۱. آپلود صفحات دفترچه سوالات
+              </h4>
+              <span class="badge badge-sage">آپلود چندتایی مجاز است</span>
+            </div>
+            <p class="muted mb-4" style="font-size:.88rem;line-height:1.7">می‌توانید یک یا چندین عکس از صفحات دفترچه‌ی سوالات کنکور را آپلود کنید تا دانش‌آموز هنگام آزمون، آن‌ها را به‌راحتی ورق بزند.</p>
+            
+            <label class="upload-zone text-c" style="display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed var(--gold);padding:36px;border-radius:var(--r-lg);background:var(--gold-glass);cursor:pointer;transition:all 0.3s">
+              <span style="font-size:2.5rem;color:var(--gold);margin-bottom:12px"><?= icon('paperclip',40) ?></span>
+              <b style="color:var(--text-1);font-size:1.05rem">برای آپلود عکس صفحات دفترچه کلیک کنید</b>
+              <span class="muted mt-1" style="font-size:.8rem">انتخاب چندین فایل همزمان مجاز است (JPG, PNG, WEBP)</span>
+              <input type="file" id="examSheetInput" accept="image/*" multiple hidden>
+            </label>
+
+            <!-- گرید صفحات آپلودشده -->
+            <div id="uploadedSheetsThumbsGrid" class="grid gap-3 mt-4" style="grid-template-columns:repeat(auto-fill, minmax(120px, 1fr))">
+              <?php foreach($sheetArr as $si => $sPath): ?>
+                <div class="sheet-thumb-item relative panel" data-spath="<?= e($sPath) ?>" style="background:var(--surface-2);padding:10px;border-radius:12px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+                  <span class="absolute badge badge-gold" style="top:6px;right:6px;font-size:.7۵rem;padding:2px 6px">ص<?= $si+1 ?></span>
+                  <button type="button" class="btn btn-ghost btn-sm absolute remove-sheet-item-btn" style="top:6px;left:6px;background:rgba(217,116,116,0.2);color:var(--danger);border:1px solid rgba(217,116,116,0.4);padding:0;width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:bold" title="حذف این صفحه">×</button>
+                  <img src="<?= url($sPath) ?>" alt="" style="max-height:140px;max-width:100%;object-fit:contain;border-radius:6px;margin-top:16px">
+                </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        </div>
+
+        <!-- ستون پاسخنامه کلیدی هوشمند -->
+        <div class="panel flex" style="flex-direction:column;justify-content:space-between;background:var(--surface-1);padding:24px;border-radius:var(--r-lg);min-height:100%;word-break:break-word">
+          <div>
+            <h4 style="font-size:1.15rem;font-weight:900;color:var(--sage);margin-bottom:16px;display:flex;align-items:center;gap:8px">
+              <?= icon('check-circle',20) ?> ۲. ورود سریع کلید پاسخنامه
+            </h4>
+            <p class="muted mb-4" style="font-size:.88rem;line-height:1.7">می‌توانید کلید سوالات را به‌صورت یک‌جا (مثلاً <code>4123411...</code>) پیست کنید یا مستقیماً روی حباب‌های زیر کلیک کنید:</p>
+
+            <div class="field mb-4">
+              <div class="between mb-1"><label style="font-size:.9rem;color:var(--text-2)">رشته‌ی پاسخنامه (اعداد ۱ تا ۴):</label><span id="keyQCountBadge" class="badge badge-gold">۰ سوال</span></div>
+              <input class="input" id="quickKeyInput" value="<?= e($exam['answer_key'] ?? '') ?>" placeholder="مثلاً 4123421142341..." style="font-family:monospace;direction:ltr;font-size:1.1rem;letter-spacing:2px;font-weight:bold">
+            </div>
+
+            <!-- پاسخ‌برگ حبابی تعاملی مشاور -->
+            <div class="bubble-grid-studio" style="max-height:380px;overflow-y:auto;background:var(--surface-2);border:1px solid var(--border-soft);padding:16px;border-radius:var(--r-lg);display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:12px;direction:ltr">
+              <?php 
+                $existingKey = trim((string)($exam['answer_key'] ?? ''));
+                $currCount = max(30, mb_strlen($existingKey));
+                for($qi=1; $qi<=$currCount; $qi++): 
+                  $cVal = isset($existingKey[$qi-1]) ? (int)$existingKey[$qi-1] : 0;
+              ?>
+                <div class="bg-item" data-qnum="<?= $qi ?>" style="background:var(--surface-1);padding:8px;border-radius:8px;display:flex;flex-direction:column;align-items:center;border:1px solid var(--border-soft)">
+                  <span style="font-size:.75rem;color:var(--text-3);font-weight:bold;margin-bottom:4px">Q<?= $qi ?></span>
+                  <div class="flex gap-1">
+                    <?php for($oi=1; $oi<=4; $oi++): ?>
+                      <button type="button" class="bubble-btn <?= $cVal===$oi?'active':'' ?>" data-opt="<?= $oi ?>" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:<?= $cVal===$oi?'var(--gold)':'var(--surface-2)' ?>;color:<?= $cVal===$oi?'#000':'var(--text-2)' ?>;font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">
+                        <?= $oi ?>
+                      </button>
+                    <?php endfor; ?>
+                  </div>
+                </div>
+              <?php endfor; ?>
+            </div>
+          </div>
+
+          <div class="mt-4 flex gap-3">
+            <button type="button" id="add10BubblesBtn" class="btn btn-ghost btn-sm" style="flex:1"><?= icon('plus',14) ?> +۱۰ سوال دیگر</button>
+            <button type="button" id="saveQuickSheetSuiteBtn" class="btn btn-gold btn-lg" style="flex:2;font-weight:900"><?= icon('check',18) ?> ثبت نهایی و ساخت سوالات</button>
+          </div>
+        </div>
+
+      </div>
     </div>
 
-    <?php if (!$sections): ?>
-    <div class="panel" id="emptySections"><div class="empty-state"><div class="es-ico"><?= icon('book',30) ?></div><p>هنوز درسی اضافه نکرده‌اید</p><p class="muted" style="font-size:.84rem">با دکمه‌ی «افزودن درس» شروع کنید (مثلاً شیمی، ریاضی، ادبیات).</p>
-      <button class="btn btn-gold mt-4" id="addSectionBtn2"><?= icon('plus',16) ?> افزودن اولین درس</button></div></div>
-    <?php endif; ?>
+    <!-- 2. استودیوی طراحی استاندارد تکی (Standard Studio) -->
+    <div class="studio-suite <?= $mode==='standard'?'':'hidden' ?>" id="suiteStandard">
+      <div class="between wrap gap-3 mb-4">
+        <div class="exam-summary">
+          <span class="ps-item"><span class="v" id="totalQ"><?= fa_num(count($questions)) ?></span><span class="k">سوال</span></span>
+          <span class="ps-item"><span class="v" id="totalSec"><?= fa_num(count($sections)) ?></span><span class="k">درس/بخش</span></span>
+        </div>
+        <button class="btn btn-ghost flex gap-1" id="addSectionBtn" style="align-items:center"><?= icon('plus',16) ?> افزودن بخش جدید</button>
+      </div>
+
+      <div id="sectionsWrap">
+        <?php foreach ($sections as $sec): ?>
+          <?php require __DIR__ . '/_section_tpl.php'; ?>
+        <?php endforeach; ?>
+      </div>
+
+      <?php if (!$sections): ?>
+      <div class="panel" id="emptySections"><div class="empty-state"><div class="es-ico"><?= icon('book',30) ?></div><p>هنوز بخشی اضافه نکرده‌اید</p><p class="muted" style="font-size:.84rem">با دکمه‌ی «افزودن بخش جدید» شروع کنید.</p>
+        <button class="btn btn-gold mt-4 flex gap-1" id="addSectionBtn2" style="align-items:center"><?= icon('plus',16) ?> افزودن اولین بخش</button></div></div>
+      <?php endif; ?>
+    </div>
+
   </div>
 </div>
 
 <script>
-  window.API_EXAM = '<?= url('api/exam_builder.php') ?>';
-  window.SUBJECTS = <?= json_encode(array_map(fn($s)=>['id'=>(int)$s['id'],'name'=>$s['name']], $subjects), JSON_UNESCAPED_UNICODE) ?>;
+  window.API_EXAM  = '<?= url('api/exam_builder.php') ?>';
+  window.SUBJECTS  = <?= json_encode(array_map(fn($s)=>['id'=>(int)$s['id'],'name'=>$s['name']], $subjects), JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <?php panel_end(['exam_builder.js']); ?>
