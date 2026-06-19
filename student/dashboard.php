@@ -93,8 +93,9 @@ panel_start('خانه', jalali_date('now'), 'student', 'dashboard', ['student.cs
   <?php if (!$todayTasks): ?>
     <div class="empty-state"><div class="es-ico"><?= icon('inbox',30) ?></div><p>برای امروز تسکی ثبت نشده 🌱</p><p class="muted" style="font-size:.84rem">از یک روز استراحت لذت ببر یا برنامه‌ی کامل هفته را ببین.</p></div>
   <?php else: ?>
-    <?php if (($todayDone + $todayPartial) < $todayTotal): ?>
-    <div class="hint-bar"><?= icon('info',16) ?><span>از سه دکمه‌ی <b>✓ کامل</b>، <b>● ناقص</b> یا <b>× عدم اجرا</b> استفاده کن. <?= fa_num($todayTotal-$todayDone-$todayPartial) ?> تسک مونده!</span></div>
+    <?php $todayMissed = count(array_filter($todayTasks, fn($t)=>task_status($t)==='missed')); ?>
+    <?php if (($todayDone + $todayPartial + $todayMissed) < $todayTotal): ?>
+    <div class="hint-bar"><?= icon('info',16) ?><span>از سه دکمه‌ی <b>✓ کامل</b>، <b>● ناقص</b> یا <b>× عدم اجرا</b> استفاده کن. <?= fa_num($todayTotal-$todayDone-$todayPartial-$todayMissed) ?> تسک مونده!</span></div>
     <?php else: ?>
     <div class="hint-bar done"><?= icon('check-circle',16) ?><span>عالیه! همه‌ی تسک‌های امروز رو زدی 🎉</span></div>
     <?php endif; ?>

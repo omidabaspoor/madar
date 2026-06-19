@@ -17,7 +17,7 @@ $allTime = db()->prepare("SELECT COUNT(*) total, COALESCE(SUM($scoreSql),0) done
 $allTime->execute([$u['id']]);
 $at = $allTime->fetch();
 $atPct = (int)$at['total'] ? round(((float)$at['done'])/(int)$at['total']*100) : 0;
-$atDoneDisplay = ((float)$at['done'] == floor((float)$at['done'])) ? (string)(int)$at['done'] : number_format((float)$at['done'],1);
+$atDoneDisplay = score_display((float)($at['done'] ?? 0));
 
 panel_start('گزارش پیشرفت', 'تحلیل عملکرد تو', 'student', 'progress', ['student.css']);
 

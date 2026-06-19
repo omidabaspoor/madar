@@ -78,6 +78,8 @@ panel_start('گزارش‌دهی پیشرفته', report_type_label($type).' · 
     </div>
     <?php if($analysis['alerts']): ?><div class="insight-alerts"><?php foreach($analysis['alerts'] as $al): ?><div class="ia <?= e($al['level']) ?>"><b><?= e($al['title']) ?></b><span><?= e($al['text']) ?></span></div><?php endforeach; ?></div><?php endif; ?>
     <div class="insight-recs"><b>پیشنهادهای عملی</b><ul><?php foreach($analysis['recommendations'] as $rec): ?><li><?= e($rec) ?></li><?php endforeach; ?></ul></div>
+    <?php if(!empty($analysis['action_plan'])): ?><div class="insight-recs action"><b>نقشه اقدام کوتاه</b><ul><?php foreach($analysis['action_plan'] as $rec): ?><li><?= e($rec) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
+    <?php if(!empty($analysis['method_notes'])): ?><div class="insight-method"><b><?= icon('book',16) ?> پشتوانه تحلیلی</b><?php foreach($analysis['method_notes'] as $note): ?><span><?= e($note) ?></span><?php endforeach; ?></div><?php endif; ?>
   </div>
 </div>
 <?php endif; ?>

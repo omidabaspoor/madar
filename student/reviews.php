@@ -11,7 +11,7 @@ $scope = in_array($_GET['scope'] ?? 'due', ['due','upcoming','done'], true) ? $_
 $reviewError = '';
 try {
     if (!$reviewsEnabled) { throw new RuntimeException('DISABLED_REVIEWS'); }
-    review_schema_ready();
+    if (!review_schema_ready()) { throw new RuntimeException('REVIEW_SCHEMA_NOT_READY'); }
     review_due_notifications((int)$u['id']);
     $counts = review_counts((int)$u['id']);
     $items = review_items((int)$u['id'], $scope);
