@@ -65,7 +65,7 @@ function mock_window(): string {
     <div class="win">
       <div class="win-bar">
         <span class="win-dot r"></span><span class="win-dot y"></span><span class="win-dot g"></span>
-        <span class="win-url">madar.app/admin</span>
+        <span class="win-url">madaar.app/admin</span>
       </div>
       <div class="win-body">
         <div class="win-side">

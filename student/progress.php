@@ -9,13 +9,15 @@ $u = current_user();
 $week = student_week_stats((int)$u['id']);
 $chart = student_week_chart((int)$u['id']);
 $subjects = student_subject_progress((int)$u['id']);
-$maxBar = max(1, max(array_map(fn($c)=>$c['total'],$chart)));
+$maxBar = max(1, max(array_map(fn($c)=>max((float)$c['total'], (float)$c['done']),$chart))); 
 
 // آمار کلی همه‌ی هفته‌ها
-$allTime = db()->prepare('SELECT COUNT(*) total, COALESCE(SUM(is_done),0) done FROM tasks WHERE student_id=?');
+$scoreSql = task_score_sql('t');
+$allTime = db()->prepare("SELECT COUNT(*) total, COALESCE(SUM($scoreSql),0) done, SUM(completion_status='full') full_count, SUM(completion_status='partial') partial_count, SUM(completion_status='missed') missed_count FROM tasks t WHERE student_id=?");
 $allTime->execute([$u['id']]);
 $at = $allTime->fetch();
-$atPct = (int)$at['total'] ? round($at['done']/$at['total']*100) : 0;
+$atPct = (int)$at['total'] ? round(((float)$at['done'])/(int)$at['total']*100) : 0;
+$atDoneDisplay = ((float)$at['done'] == floor((float)$at['done'])) ? (string)(int)$at['done'] : number_format((float)$at['done'],1);
 
 panel_start('گزارش پیشرفت', 'تحلیل عملکرد تو', 'student', 'progress', ['student.css']);
 
@@ -34,9 +36,9 @@ $area = $path . 'L'.round($pts[count($pts)-1][0],1).' '.($h-$pad).' L'.$pad.' '.
 ?>
 <div class="stat-cards">
   <div class="panel stat reveal"><span class="icon-tile sage"><?= icon('target',24) ?></span><div><div class="v"><?= fa_num($atPct) ?>٪</div><div class="k">پیشرفت کلی</div></div></div>
-  <div class="panel stat reveal" data-d="1"><span class="icon-tile"><?= icon('check-circle',24) ?></span><div><div class="v"><?= fa_num($at['done']) ?></div><div class="k">کل تسک‌های انجام‌شده</div></div></div>
+  <div class="panel stat reveal" data-d="1"><span class="icon-tile"><?= icon('check-circle',24) ?></span><div><div class="v"><?= fa_num($atDoneDisplay) ?></div><div class="k">امتیاز تسک‌ها</div></div></div>
   <div class="panel stat reveal" data-d="2"><span class="icon-tile sage"><?= icon('fire',24) ?></span><div><div class="v"><?= fa_num($u['streak']) ?></div><div class="k">استریک فعلی</div></div></div>
-  <div class="panel stat reveal" data-d="3"><span class="icon-tile" style="background:rgba(217,178,95,.14);color:var(--warn)"><?= icon('calendar',24) ?></span><div><div class="v"><?= fa_num($week['percent']) ?>٪</div><div class="k">این هفته</div></div></div>
+  <div class="panel stat reveal" data-d="3"><span class="icon-tile" style="background:rgba(217,178,95,.14);color:var(--warn)"><?= icon('calendar',24) ?></span><div><div class="v"><?= fa_num($week['percent']) ?>٪</div><div class="k">این هفته · قرمز <?= fa_num($week['missed']) ?></div></div></div>
 </div>
 
 <div class="panel-grid cols-2">
@@ -74,7 +76,7 @@ $area = $path . 'L'.round($pts[count($pts)-1][0],1).' '.($h-$pad).' L'.$pad.' '.
   <div class="barchart">
     <?php foreach ($chart as $c): $hh=round($c['done']/$maxBar*100); ?>
     <div class="bcol">
-      <div class="bar" data-h="<?= $hh ?>" style="height:0" data-tip="<?= fa_num($c['done']) ?> از <?= fa_num($c['total']) ?>"></div>
+      <div class="bar" data-h="<?= $hh ?>" style="height:0" data-tip="<?= fa_num($c['done_display']) ?> از <?= fa_num($c['total']) ?>"></div>
       <span class="blbl"><?= mb_substr($c['day'],0,3) ?></span>
     </div>
     <?php endforeach; ?>

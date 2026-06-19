@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
   advisor_id      INT UNSIGNED DEFAULT NULL,            -- مشاور این دانش‌آموز
   status          ENUM('pending','active','suspended') NOT NULL DEFAULT 'pending',
   mood            VARCHAR(20)  DEFAULT NULL,            -- حال امروز
+  mood_date       DATE DEFAULT NULL,                       -- تاریخ ثبت حال روزانه
   streak          INT UNSIGNED NOT NULL DEFAULT 0,
   last_active      DATE DEFAULT NULL,
   remember_token  VARCHAR(64) DEFAULT NULL,
@@ -94,8 +95,12 @@ CREATE TABLE IF NOT EXISTS tasks (
   -- وضعیت تکمیل توسط دانش‌آموز
   done_count    INT UNSIGNED NOT NULL DEFAULT 0,
   is_done       TINYINT(1) NOT NULL DEFAULT 0,
+  completion_status ENUM('pending','full','partial','missed') NOT NULL DEFAULT 'pending', -- وضعیت سه‌حالته/قرمز
+  course_percent TINYINT UNSIGNED DEFAULT NULL,       -- درصد پوشش کورس توسط دانش‌آموز
+  student_feeling VARCHAR(30) DEFAULT NULL,           -- حس دانش‌آموز برای تسک‌های خواندنی
   student_note  VARCHAR(500) DEFAULT NULL,
   completed_at  DATETIME DEFAULT NULL,
+  status_updated_at DATETIME DEFAULT NULL,
   -- بازخورد مشاور
   advisor_feedback VARCHAR(500) DEFAULT NULL,
   feedback_at   DATETIME DEFAULT NULL,
@@ -297,6 +302,63 @@ CREATE TABLE IF NOT EXISTS exam_answers (
   KEY idx_ans_attempt (attempt_id),
   CONSTRAINT fk_ans_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,
   CONSTRAINT fk_ans_question FOREIGN KEY (question_id) REFERENCES exam_questions(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
+--  student_reports : گزارش‌های خودکار و پیشرفته دانش‌آموز
+-- ----------------------------------------------------------
+-- Upgrade: advanced student reporting system
+CREATE TABLE IF NOT EXISTS student_reports (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  student_id INT UNSIGNED NOT NULL,
+  report_type ENUM('daily','weekly','monthly') NOT NULL DEFAULT 'daily',
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  auto_snapshot_json LONGTEXT NULL,
+  advanced_json LONGTEXT NULL,
+  status ENUM('draft','submitted') NOT NULL DEFAULT 'draft',
+  submitted_at DATETIME DEFAULT NULL,
+  advisor_note TEXT NULL,
+  reviewed_by INT UNSIGNED DEFAULT NULL,
+  reviewed_at DATETIME DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_student_report (student_id, report_type, period_start),
+  KEY idx_report_student (student_id, report_type, period_start),
+  KEY idx_report_status (status, submitted_at),
+  CONSTRAINT fk_report_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ----------------------------------------------------------
+--  review_reminders : مرورهای فاصله‌دار
+-- ----------------------------------------------------------
+-- Upgrade: spaced repetition review reminders
+CREATE TABLE IF NOT EXISTS review_reminders (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  student_id INT UNSIGNED NOT NULL,
+  source_task_id INT UNSIGNED NOT NULL,
+  subject_id INT UNSIGNED DEFAULT NULL,
+  topic_title VARCHAR(180) NOT NULL,
+  source VARCHAR(160) DEFAULT NULL,
+  first_studied_at DATETIME NOT NULL,
+  interval_days INT UNSIGNED NOT NULL,
+  review_no TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  profile_key VARCHAR(40) DEFAULT NULL,
+  profile_label VARCHAR(80) DEFAULT NULL,
+  suggested_minutes INT UNSIGNED DEFAULT 15,
+  due_date DATE NOT NULL,
+  status ENUM('pending','done','dismissed') NOT NULL DEFAULT 'pending',
+  notified_at DATETIME DEFAULT NULL,
+  completed_at DATETIME DEFAULT NULL,
+  quality ENUM('hard','good','easy') DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_review_step (source_task_id, interval_days),
+  KEY idx_review_student_due (student_id, status, due_date),
+  KEY idx_review_source (source_task_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

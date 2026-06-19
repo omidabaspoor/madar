@@ -1,5 +1,5 @@
 /* مَدار Service Worker — network-first برای CSS/JS و صفحات، cache-first برای عکس/فونت */
-const VERSION = 'madar-v2';
+const VERSION = 'madar-v3';
 const STATIC_CACHE = 'static-' + VERSION;
 const PAGE_CACHE = 'pages-' + VERSION;
 
@@ -10,7 +10,7 @@ const OFFLINE_URL = SCOPE + '/offline.php';
 const STATIC_ASSETS = [
   SCOPE + '/assets/css/app.css',
   SCOPE + '/assets/js/app.js',
-  SCOPE + '/assets/img/logo.svg',
+  SCOPE + '/assets/img/logo.png',
   OFFLINE_URL,
 ];
 
@@ -71,4 +71,14 @@ self.addEventListener('fetch', (e) => {
       return res;
     }).catch(() => caches.match(req).then(cached => cached || caches.match(OFFLINE_URL)))
   );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = event.notification?.data?.url || SCOPE + '/student/dashboard.php';
+  const url = target.startsWith('http') ? target : SCOPE + '/' + String(target).replace(/^\//,'');
+  event.waitUntil(clients.matchAll({type:'window', includeUncontrolled:true}).then(list=>{
+    for (const c of list) { if ('focus' in c) return c.focus().then(()=>c.navigate ? c.navigate(url) : c); }
+    return clients.openWindow(url);
+  }));
 });

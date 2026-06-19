@@ -33,7 +33,7 @@ panel_start('برنامه من', $plan ? (jalali_date($weekStart) . ' تا ' . j
   <?php if ($plan): $pp = plan_progress((int)$plan['id']); ?>
   <div class="flex gap-2 wrap">
     <a href="<?= url('student/plan_pdf.php?week='.$weekStart) ?>" target="_blank" class="btn btn-gold btn-sm"><?= icon('paperclip',14) ?> چاپ / ذخیره PDF</a>
-    <span class="badge badge-sage"><?= icon('target',14) ?> <?= fa_num($pp['percent']) ?>٪ تکمیل (<?= fa_num($pp['done']) ?>/<?= fa_num($pp['total']) ?>)</span>
+    <span class="badge badge-sage"><?= icon('target',14) ?> <?= fa_num($pp['percent']) ?>٪ تکمیل (<?= fa_num($pp['done_display']) ?>/<?= fa_num($pp['total']) ?>)</span>
   </div>
   <?php endif; ?>
 </div>
@@ -60,29 +60,8 @@ panel_start('برنامه من', $plan ? (jalali_date($weekStart) . ' تا ' . j
     <div class="panel"><div class="empty-state" style="padding:36px"><div class="es-ico"><?= icon('inbox',28) ?></div>برای <?= e($dn) ?> تسکی نیست</div></div>
   <?php else: ?>
   <div class="task-list">
-    <?php foreach ($dayTasks as $t):
-      $done=(int)$t['is_done']; $color=$t['subj_color']??'#6b8872';
-      $typeLabel=TASK_TYPES[$t['task_type']]['label']??$t['task_type']; ?>
-    <div class="s-task <?= $done?'done':'' ?>" data-id="<?= (int)$t['id'] ?>" data-target="<?= $t['target_count']!==null?(int)$t['target_count']:'' ?>" data-done="<?= (int)$t['done_count'] ?>">
-      <label class="checkbox st-check"><input type="checkbox" <?= $done?'checked':'' ?> data-toggle-task><span class="box"><?= icon('check',14) ?></span></label>
-      <div class="st-body">
-        <div class="st-title"><?= e($t['title']) ?>
-          <?php if($t['subj_name']):?><span class="st-subj" style="background:<?= e($color) ?>22;color:<?= e($color) ?>"><?= e($t['subj_name']) ?></span><?php endif;?>
-        </div>
-        <div class="st-meta">
-          <span class="badge" style="font-size:.7rem;padding:2px 8px"><?= e($typeLabel) ?></span>
-          <?php if($t['target_count']!==null):?><span class="st-prog st-prog-count" data-unit="<?= e($t['target_unit']) ?>"><?= fa_num($t['done_count']) ?>/<?= fa_num($t['target_count']) ?> <?= e($t['target_unit']) ?></span>
-          <?php elseif($t['duration_min']):?><span class="st-prog"><?= fa_num($t['duration_min']) ?> دقیقه</span><?php endif;?>
-          <?php if(!empty($t['source'])):?><span class="st-src"><?= icon('book',12) ?> <?= e($t['source']) ?></span><?php endif;?>
-        </div>
-        <?php if($t['student_note']):?>
-          <div class="st-note-box"><span class="st-note-text" data-raw="<?= e($t['student_note']) ?>"><?= icon('note',13) ?> <?= e($t['student_note']) ?></span> <button class="st-note-edit" data-note="<?= (int)$t['id'] ?>">ویرایش</button></div>
-        <?php else:?>
-          <button class="st-note-btn" data-note="<?= (int)$t['id'] ?>"><?= icon('note',14) ?> افزودن یادداشت</button>
-        <?php endif;?>
-        <?php if($t['advisor_feedback']):?><div class="st-feedback"><span class="ico"><?= icon('message',15) ?></span><span><b>بازخورد مشاور:</b> <?= e($t['advisor_feedback']) ?></span></div><?php endif;?>
-      </div>
-    </div>
+    <?php foreach ($dayTasks as $t): ?>
+      <?= student_task_card($t) ?>
     <?php endforeach; ?>
   </div>
   <?php endif; ?>
@@ -97,3 +76,41 @@ panel_start('برنامه من', $plan ? (jalali_date($weekStart) . ' تا ' . j
   window.NOTIF_READ_URL='<?= url('api/notifications.php?read=1') ?>';
 </script>
 <?php panel_end(['student.js']); ?>
+
+<?php
+function student_task_card(array $t): string {
+    $status = task_status($t);
+    $color = $t['subj_color'] ?? '#6b8872';
+    $meta = [];
+    if ($t['target_count']!==null) {
+        $dc = (int)$t['done_count']; $tc=(int)$t['target_count'];
+        $meta[] = '<span class="st-prog st-prog-count" data-unit="'.e($t['target_unit']).'">'.fa_num($dc).'/'.fa_num($tc).' '.e($t['target_unit']).'</span>';
+    } elseif ($t['duration_min']) {
+        $meta[] = '<span class="st-prog">'.fa_num($t['duration_min']).' دقیقه</span>';
+    }
+    if (isset($t['course_percent']) && $t['course_percent'] !== null) $meta[] = '<span class="st-prog st-course">'.fa_num((int)$t['course_percent']).'٪ کورس</span>';
+    else $meta[] = '<span class="st-prog st-course"></span>';
+    $typeLabel = TASK_TYPES[$t['task_type']]['label'] ?? $t['task_type'];
+    $subjTag = $t['subj_name'] ? '<span class="st-subj" style="background:'.e($color).'22;color:'.e($color).'">'.e($t['subj_name']).'</span>' : '';
+    $feel = feeling_info($t['student_feeling'] ?? null);
+    $feelTag = $feel ? '<span class="st-feel">'.$feel['emoji'].' '.e($feel['label']).'</span>' : '';
+    $fb = $t['advisor_feedback'] ? '<div class="st-feedback"><span class="ico">'.icon('message',15).'</span><span><b>بازخورد مشاور:</b> '.e($t['advisor_feedback']).'</span></div>' : '';
+    $noteBlock = $t['student_note']
+      ? '<div class="st-note-box"><span class="st-note-text" data-raw="'.e($t['student_note']).'">'.icon('note',13).' '.e($t['student_note']).'</span> <button class="st-note-edit" data-note="'.(int)$t['id'].'">ویرایش</button></div>'
+      : '<button class="st-note-btn" data-note="'.(int)$t['id'].'">'.icon('note',14).' افزودن یادداشت</button>';
+    $actions = '<div class="task-actions" aria-label="ثبت وضعیت">'
+      .'<button type="button" class="task-action full '.($status==='full'?'active':'').'" data-status-action="full" title="اجرای کامل">✓</button>'
+      .'<button type="button" class="task-action partial '.($status==='partial'?'active':'').'" data-status-action="partial" title="اجرای ناقص">●</button>'
+      .'<button type="button" class="task-action missed '.($status==='missed'?'active':'').'" data-status-action="missed" title="عدم اجرا">×</button>'
+      .'</div>';
+    return '<div class="s-task '.($status==='full'?'done':$status).'" data-id="'.(int)$t['id'].'" data-status="'.$status.'" data-type="'.e($t['task_type']).'" data-target="'.($t['target_count']!==null?(int)$t['target_count']:'').'" data-target-unit="'.e($t['target_unit'] ?? '').'" data-done="'.(int)$t['done_count'].'" data-course="'.(isset($t['course_percent'])&&$t['course_percent']!==null?(int)$t['course_percent']:'').'" data-feeling="'.e($t['student_feeling'] ?? '').'">'
+      .$actions
+      .'<div class="st-body">'
+        .'<div class="st-title"><span class="st-title-main">'.e($t['title']).'</span> '.$subjTag.' <span class="st-status-text">'.e(TASK_STATUS_LABELS[$status] ?? '').'</span></div>'
+        .'<div class="st-meta"><span class="badge" style="font-size:.7rem;padding:2px 8px">'.e($typeLabel).'</span>'.implode('',$meta).$feelTag.(!empty($t['source'])?'<span class="st-src">'.icon('book',12).' '.e($t['source']).'</span>':'').'</div>'
+        .$noteBlock
+        .$fb
+      .'</div>'
+    .'</div>';
+}
+?>

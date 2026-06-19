@@ -1,24 +1,36 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/models.php';
+require_once __DIR__ . '/../includes/reporting.php';
+require_once __DIR__ . '/../includes/review_scheduler.php';
 require_once __DIR__ . '/../includes/panel_layout.php';
 boot_session();
 require_role('student');
-$u = current_user();
+user_mood_schema_ready();
+$u = get_user((int)current_user()['id']);
+$webNotifEnabled = advisor_feature_enabled((int)($u['advisor_id'] ?? 0), 'web_notifications');
+$todayMood = current_mood_key($u);
 
 $todayTasks = student_today_tasks((int)$u['id']);
 $week = student_week_stats((int)$u['id']);
 $chart = student_week_chart((int)$u['id']);
+if (advisor_feature_enabled((int)($u['advisor_id'] ?? 0), 'review_enabled')) {
+    review_due_notifications((int)$u['id']);
+    $reviewCounts = review_counts((int)$u['id']);
+} else { $reviewCounts = ['due'=>0,'upcoming'=>0,'done'=>0]; }
+$pendingReports = report_pending_items((int)$u['id']);
 $todayIdx = persian_day_index(date('Y-m-d'));
-$todayDone = count(array_filter($todayTasks, fn($t)=>$t['is_done']));
+$todayScore = array_sum(array_map(fn($t)=>task_score($t), $todayTasks));
+$todayDone = count(array_filter($todayTasks, fn($t)=>task_status($t)==='full'));
+$todayPartial = count(array_filter($todayTasks, fn($t)=>task_status($t)==='partial'));
 $todayTotal = count($todayTasks);
-$todayPct = $todayTotal ? round($todayDone/$todayTotal*100) : 0;
+$todayPct = $todayTotal ? round($todayScore/$todayTotal*100) : 0;
 
 $hour = (int)date('H');
 $greet = $hour<12 ? 'صبح بخیر' : ($hour<17 ? 'ظهر بخیر' : ($hour<20 ? 'عصر بخیر' : 'شب بخیر'));
 $first = explode(' ', (string)$u['full_name'])[0];
 
-$maxBar = max(1, max(array_map(fn($c)=>$c['total'],$chart)));
+$maxBar = max(1, max(array_map(fn($c)=>max((float)$c['total'], (float)$c['done']),$chart))); 
 
 panel_start('خانه', jalali_date('now'), 'student', 'dashboard', ['student.css']);
 ?>
@@ -32,18 +44,45 @@ panel_start('خانه', jalali_date('now'), 'student', 'dashboard', ['student.cs
     <span class="badge" style="background:rgba(12,21,18,.25);color:#0c1512;border:none"><?= icon('fire',15) ?> <?= fa_num($u['streak']) ?> روز پیاپی</span>
   </div>
   <div class="greet-progress">
-    <div class="between" style="font-size:.85rem;font-weight:700;margin-bottom:6px"><span>پیشرفت امروز</span><span><?= fa_num($todayPct) ?>٪ · <?= fa_num($todayDone) ?>/<?= fa_num($todayTotal) ?></span></div>
+    <div class="between" style="font-size:.85rem;font-weight:700;margin-bottom:6px"><span>پیشرفت امروز</span><span><?= fa_num($todayPct) ?>٪ · کامل <?= fa_num($todayDone) ?> / ناقص <?= fa_num($todayPartial) ?></span></div>
     <div class="progress"><span data-w="<?= $todayPct ?>" style="width:0"></span></div>
   </div>
   <div class="mood-wrap">
     <span class="mood-label">حال امروزت چطوره؟</span>
     <div class="mood-row" id="moodRow">
       <?php foreach (['😄'=>'happy','🙂'=>'ok','😐'=>'meh','😴'=>'tired','😣'=>'stressed'] as $emo=>$key): ?>
-      <button class="mood-btn <?= $u['mood']===$key?'active':'' ?>" data-mood="<?= $key ?>" type="button"><?= $emo ?></button>
+      <button class="mood-btn <?= $todayMood===$key?'active':'' ?>" data-mood="<?= $key ?>" type="button"><?= $emo ?></button>
       <?php endforeach; ?>
     </div>
   </div>
 </div>
+
+
+
+
+<?php if($webNotifEnabled): ?>
+<div class="panel notif-permission mb-4" style="display:none">
+  <div><b>🔔 اعلان مرورها را فعال کن</b><span>برای اینکه وب‌اپ زمان مرورهای مهم را روی گوشی یادآوری کند، اجازه اعلان را فعال کن.</span></div>
+  <button class="btn btn-gold btn-sm" type="button" data-notif-enable>فعال‌سازی اعلان</button>
+</div>
+<script>if('Notification' in window && Notification.permission==='default') document.currentScript.previousElementSibling.style.display='flex';</script>
+<?php endif; ?>
+
+<?php if(($reviewCounts['due'] ?? 0) > 0): ?>
+<div class="panel review-due-banner reveal" data-d="1" style="margin-bottom:18px">
+  <div><b>🔁 وقت مرور فاصله‌دار</b><span><?= fa_num($reviewCounts['due']) ?> مبحث برای مرور آماده است.</span></div>
+  <a class="btn btn-gold btn-sm" href="<?= url('student/reviews.php') ?>">مشاهده مرورها</a>
+</div>
+<?php endif; ?>
+
+<?php if($pendingReports): ?>
+<div class="panel report-due reveal" data-d="1" style="margin-bottom:18px">
+  <b><?= icon('bell',18) ?> گزارش تکمیلی در انتظار</b>
+  <div class="report-due-list">
+    <?php foreach($pendingReports as $pr): ?><a href="<?= e($pr['url']) ?>" class="badge badge-gold"><?= e($pr['label']) ?> · <?= jalali_date($pr['start']) ?></a><?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
 
 <!-- ==== TODAY'S TASKS (most important — first) ==== -->
 <div class="panel reveal" data-d="1" style="margin-bottom:18px">
@@ -54,8 +93,8 @@ panel_start('خانه', jalali_date('now'), 'student', 'dashboard', ['student.cs
   <?php if (!$todayTasks): ?>
     <div class="empty-state"><div class="es-ico"><?= icon('inbox',30) ?></div><p>برای امروز تسکی ثبت نشده 🌱</p><p class="muted" style="font-size:.84rem">از یک روز استراحت لذت ببر یا برنامه‌ی کامل هفته را ببین.</p></div>
   <?php else: ?>
-    <?php if ($todayDone < $todayTotal): ?>
-    <div class="hint-bar"><?= icon('info',16) ?><span>روی <b>مربع کنار هر تسک</b> بزن تا تکمیلش کنی. <?= fa_num($todayTotal-$todayDone) ?> تسک مونده!</span></div>
+    <?php if (($todayDone + $todayPartial) < $todayTotal): ?>
+    <div class="hint-bar"><?= icon('info',16) ?><span>از سه دکمه‌ی <b>✓ کامل</b>، <b>● ناقص</b> یا <b>× عدم اجرا</b> استفاده کن. <?= fa_num($todayTotal-$todayDone-$todayPartial) ?> تسک مونده!</span></div>
     <?php else: ?>
     <div class="hint-bar done"><?= icon('check-circle',16) ?><span>عالیه! همه‌ی تسک‌های امروز رو زدی 🎉</span></div>
     <?php endif; ?>
@@ -69,7 +108,7 @@ panel_start('خانه', jalali_date('now'), 'student', 'dashboard', ['student.cs
 
 <!-- ==== compact stats ==== -->
 <div class="stat-cards">
-  <div class="panel stat reveal" data-d="2"><span class="icon-tile"><?= icon('check-circle',24) ?></span><div><div class="v"><?= fa_num($week['done']) ?>/<?= fa_num($week['total']) ?></div><div class="k">تسک‌های هفته</div></div></div>
+  <div class="panel stat reveal" data-d="2"><span class="icon-tile"><?= icon('check-circle',24) ?></span><div><div class="v"><?= fa_num($week['done_display']) ?>/<?= fa_num($week['total']) ?></div><div class="k">تسک‌های هفته</div></div></div>
   <div class="panel stat reveal" data-d="3"><span class="icon-tile sage"><?= icon('target',24) ?></span><div><div class="v"><?= fa_num($week['percent']) ?>٪</div><div class="k">پیشرفت هفته</div></div></div>
   <div class="panel stat reveal" data-d="4"><span class="icon-tile" style="background:rgba(217,178,95,.14);color:var(--warn)"><?= icon('fire',24) ?></span><div><div class="v"><?= fa_num($u['streak']) ?></div><div class="k">استریک</div></div></div>
   <div class="panel stat reveal" data-d="5"><span class="icon-tile sage"><?= icon('trophy',24) ?></span><div><div class="v"><?= fa_num($todayPct) ?>٪</div><div class="k">امروز</div></div></div>
@@ -82,7 +121,7 @@ panel_start('خانه', jalali_date('now'), 'student', 'dashboard', ['student.cs
   <div class="barchart">
     <?php foreach ($chart as $i=>$c): $h = round($c['done']/$maxBar*100); ?>
     <div class="bcol">
-      <div class="bar <?= $i===$todayIdx?'gold':'' ?>" data-h="<?= $h ?>" style="height:0" data-tip="<?= fa_num($c['done']) ?>/<?= fa_num($c['total']) ?>"></div>
+      <div class="bar <?= $i===$todayIdx?'gold':'' ?>" data-h="<?= $h ?>" style="height:0" data-tip="<?= fa_num($c['done_display']) ?>/<?= fa_num($c['total']) ?>"></div>
       <span class="blbl"><?= mb_substr($c['day'],0,3) ?></span>
     </div>
     <?php endforeach; ?>
@@ -102,7 +141,7 @@ panel_end(['student.js']);
 
 /* ---- student task card markup ---- */
 function student_task_card(array $t): string {
-    $done = (int)$t['is_done'];
+    $status = task_status($t);
     $color = $t['subj_color'] ?? '#6b8872';
     $meta = [];
     if ($t['target_count']!==null) {
@@ -111,17 +150,26 @@ function student_task_card(array $t): string {
     } elseif ($t['duration_min']) {
         $meta[] = '<span class="st-prog">'.fa_num($t['duration_min']).' دقیقه</span>';
     }
+    if (isset($t['course_percent']) && $t['course_percent'] !== null) $meta[] = '<span class="st-prog st-course">'.fa_num((int)$t['course_percent']).'٪ کورس</span>';
+    else $meta[] = '<span class="st-prog st-course"></span>';
     $typeLabel = TASK_TYPES[$t['task_type']]['label'] ?? $t['task_type'];
     $subjTag = $t['subj_name'] ? '<span class="st-subj" style="background:'.e($color).'22;color:'.e($color).'">'.e($t['subj_name']).'</span>' : '';
+    $feel = feeling_info($t['student_feeling'] ?? null);
+    $feelTag = $feel ? '<span class="st-feel">'.$feel['emoji'].' '.e($feel['label']).'</span>' : '';
     $fb = $t['advisor_feedback'] ? '<div class="st-feedback"><span class="ico">'.icon('message',15).'</span><span><b>بازخورد مشاور:</b> '.e($t['advisor_feedback']).'</span></div>' : '';
     $noteBlock = $t['student_note']
       ? '<div class="st-note-box"><span class="st-note-text" data-raw="'.e($t['student_note']).'">'.icon('note',13).' '.e($t['student_note']).'</span> <button class="st-note-edit" data-note="'.(int)$t['id'].'">ویرایش</button></div>'
       : '<button class="st-note-btn" data-note="'.(int)$t['id'].'">'.icon('note',14).' افزودن یادداشت</button>';
-    return '<div class="s-task '.($done?'done':'').'" data-id="'.(int)$t['id'].'" data-target="'.($t['target_count']!==null?(int)$t['target_count']:'').'" data-done="'.(int)$t['done_count'].'">'
-      .'<label class="checkbox st-check"><input type="checkbox" '.($done?'checked':'').' data-toggle-task><span class="box">'.icon('check',14).'</span></label>'
+    $actions = '<div class="task-actions" aria-label="ثبت وضعیت">'
+      .'<button type="button" class="task-action full '.($status==='full'?'active':'').'" data-status-action="full" title="اجرای کامل">✓</button>'
+      .'<button type="button" class="task-action partial '.($status==='partial'?'active':'').'" data-status-action="partial" title="اجرای ناقص">●</button>'
+      .'<button type="button" class="task-action missed '.($status==='missed'?'active':'').'" data-status-action="missed" title="عدم اجرا">×</button>'
+      .'</div>';
+    return '<div class="s-task '.($status==='full'?'done':$status).'" data-id="'.(int)$t['id'].'" data-status="'.$status.'" data-type="'.e($t['task_type']).'" data-target="'.($t['target_count']!==null?(int)$t['target_count']:'').'" data-target-unit="'.e($t['target_unit'] ?? '').'" data-done="'.(int)$t['done_count'].'" data-course="'.(isset($t['course_percent'])&&$t['course_percent']!==null?(int)$t['course_percent']:'').'" data-feeling="'.e($t['student_feeling'] ?? '').'">'
+      .$actions
       .'<div class="st-body">'
-        .'<div class="st-title">'.e($t['title']).' '.$subjTag.'</div>'
-        .'<div class="st-meta"><span class="badge" style="font-size:.7rem;padding:2px 8px">'.e($typeLabel).'</span>'.implode('',$meta).'</div>'
+        .'<div class="st-title"><span class="st-title-main">'.e($t['title']).'</span> '.$subjTag.' <span class="st-status-text">'.e(TASK_STATUS_LABELS[$status] ?? '').'</span></div>'
+        .'<div class="st-meta"><span class="badge" style="font-size:.7rem;padding:2px 8px">'.e($typeLabel).'</span>'.implode('',$meta).$feelTag.(!empty($t['source'])?'<span class="st-src">'.icon('book',12).' '.e($t['source']).'</span>':'').'</div>'
         .$noteBlock
         .$fb
       .'</div>'

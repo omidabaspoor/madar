@@ -1,0 +1,26 @@
+-- Upgrade: spaced repetition review reminders
+CREATE TABLE IF NOT EXISTS review_reminders (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  student_id INT UNSIGNED NOT NULL,
+  source_task_id INT UNSIGNED NOT NULL,
+  subject_id INT UNSIGNED DEFAULT NULL,
+  topic_title VARCHAR(180) NOT NULL,
+  source VARCHAR(160) DEFAULT NULL,
+  first_studied_at DATETIME NOT NULL,
+  interval_days INT UNSIGNED NOT NULL,
+  review_no TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  profile_key VARCHAR(40) DEFAULT NULL,
+  profile_label VARCHAR(80) DEFAULT NULL,
+  suggested_minutes INT UNSIGNED DEFAULT 15,
+  due_date DATE NOT NULL,
+  status ENUM('pending','done','dismissed') NOT NULL DEFAULT 'pending',
+  notified_at DATETIME DEFAULT NULL,
+  completed_at DATETIME DEFAULT NULL,
+  quality ENUM('hard','good','easy') DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_review_step (source_task_id, interval_days),
+  KEY idx_review_student_due (student_id, status, due_date),
+  KEY idx_review_source (source_task_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

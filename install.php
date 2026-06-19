@@ -41,6 +41,10 @@ if ($run) {
         'upgrade_achievements.sql'     => 'سیستم دستاوردها',
         'upgrade_exams.sql'            => 'سیستم آزمون',
         'upgrade_planner_settings.sql' => 'پیش‌فرض‌های برنامه‌ریز + حافظه‌ی هوشمند',
+        'upgrade_task_status.sql'      => 'وضعیت سه‌حالته تسک، درصد کورس و حس دانش‌آموز',
+        'upgrade_mood_date.sql'       => 'تاریخ روزانه حال دانش‌آموز',
+        'upgrade_student_reports.sql' => 'سیستم گزارش‌دهی پیشرفته دانش‌آموز',
+        'upgrade_review_reminders.sql' => 'یادآور مرورهای فاصله‌دار',
     ];
     foreach ($migrations as $file => $label) {
         $path = __DIR__ . '/sql/' . $file;
@@ -63,6 +67,25 @@ if ($run) {
         $col = $pdo->query("SHOW COLUMNS FROM tasks LIKE 'source'")->fetch();
         if (!$col) { $pdo->exec("ALTER TABLE tasks ADD COLUMN source VARCHAR(120) DEFAULT NULL AFTER description"); }
         $messages[] = 'ستون «منبع» آماده است.';
+    } catch (Throwable $e) { /* ignore */ }
+
+
+    try {
+        $cols = [];
+        foreach ($pdo->query('SHOW COLUMNS FROM tasks')->fetchAll() as $cc) { $cols[$cc['Field']] = true; }
+        if (empty($cols['completion_status'])) $pdo->exec("ALTER TABLE tasks ADD COLUMN completion_status ENUM('pending','full','partial','missed') NOT NULL DEFAULT 'pending' AFTER is_done");
+        if (empty($cols['course_percent'])) $pdo->exec("ALTER TABLE tasks ADD COLUMN course_percent TINYINT UNSIGNED DEFAULT NULL AFTER completion_status");
+        if (empty($cols['student_feeling'])) $pdo->exec("ALTER TABLE tasks ADD COLUMN student_feeling VARCHAR(30) DEFAULT NULL AFTER course_percent");
+        if (empty($cols['status_updated_at'])) $pdo->exec("ALTER TABLE tasks ADD COLUMN status_updated_at DATETIME DEFAULT NULL AFTER completed_at");
+        $pdo->exec("UPDATE tasks SET completion_status=IF(is_done=1,'full','pending') WHERE completion_status IS NULL OR completion_status=''");
+        $messages[] = 'سیستم وضعیت سه‌حالته تسک آماده است.';
+    } catch (Throwable $e) { /* ignore */ }
+
+
+    try {
+        $mc = $pdo->query("SHOW COLUMNS FROM users LIKE 'mood_date'")->fetch();
+        if (!$mc) $pdo->exec("ALTER TABLE users ADD COLUMN mood_date DATE DEFAULT NULL AFTER mood");
+        $messages[] = 'تاریخ روزانه حال دانش‌آموز آماده است.';
     } catch (Throwable $e) { /* ignore */ }
 
     // 2c) اطمینان از وجود ستون‌ها/جداول کلیدیِ تنظیمات (پشتیبان در صورت نبود فایل مهاجرت)
