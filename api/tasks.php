@@ -382,10 +382,11 @@ case 'set_status': {
         notify((int)$t['advisor_id'],'تسک قرمز شد ✕', ($u['full_name'].' «'.$t['title'].'» را انجام نداده ثبت کرد.'),'warning','admin/reports.php?student='.$me);
     }
     $week = student_week_stats($me);
-    $needsReport = report_due_daily_after_tasks($me);
+    $pendingReports = report_pending_items($me);
+    $nextReport = $pendingReports[0] ?? null;
     json_out(['ok'=>true,'status'=>$status,'is_done'=>$isDone,'done_count'=>$doneCount,'course_percent'=>$coursePercent,
         'student_feeling'=>$feeling,'target'=>$target?:null,'week'=>$week,'streak'=>get_user($me)['streak'],
-        'needs_report'=>$needsReport,'report_url'=>$needsReport?url('student/reports.php?type=daily&date='.date('Y-m-d')):null]);
+        'needs_report'=>(bool)$nextReport,'report_url'=>$nextReport['url'] ?? null,'report_label'=>$nextReport['label'] ?? null]);
 }
 
 /* ============ یادداشت دانش‌آموز ============ */

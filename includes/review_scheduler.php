@@ -86,18 +86,43 @@ function review_schema_ready(): bool
           KEY idx_review_student_due (student_id, status, due_date),
           KEY idx_review_source (source_task_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // ترمیم کامل برای نصب‌هایی که migration قدیمی/نیمه‌کاره اجرا شده و جدول ناقص مانده است.
         $cols=[]; foreach(db()->query('SHOW COLUMNS FROM review_reminders')->fetchAll() as $c) $cols[$c['Field']]=true;
         $adds=[
+          'student_id'=>'ALTER TABLE review_reminders ADD COLUMN student_id INT UNSIGNED NOT NULL DEFAULT 0 AFTER id',
+          'source_task_id'=>'ALTER TABLE review_reminders ADD COLUMN source_task_id INT UNSIGNED NOT NULL DEFAULT 0 AFTER student_id',
+          'subject_id'=>'ALTER TABLE review_reminders ADD COLUMN subject_id INT UNSIGNED DEFAULT NULL AFTER source_task_id',
+          'topic_title'=>"ALTER TABLE review_reminders ADD COLUMN topic_title VARCHAR(180) NOT NULL DEFAULT '' AFTER subject_id",
+          'source'=>'ALTER TABLE review_reminders ADD COLUMN source VARCHAR(160) DEFAULT NULL AFTER topic_title',
+          'first_studied_at'=>'ALTER TABLE review_reminders ADD COLUMN first_studied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER source',
+          'interval_days'=>'ALTER TABLE review_reminders ADD COLUMN interval_days INT UNSIGNED NOT NULL DEFAULT 1 AFTER first_studied_at',
           'review_no'=>'ALTER TABLE review_reminders ADD COLUMN review_no TINYINT UNSIGNED NOT NULL DEFAULT 1 AFTER interval_days',
           'profile_key'=>'ALTER TABLE review_reminders ADD COLUMN profile_key VARCHAR(40) DEFAULT NULL AFTER review_no',
           'profile_label'=>'ALTER TABLE review_reminders ADD COLUMN profile_label VARCHAR(80) DEFAULT NULL AFTER profile_key',
           'suggested_minutes'=>'ALTER TABLE review_reminders ADD COLUMN suggested_minutes INT UNSIGNED DEFAULT 15 AFTER profile_label',
+          'due_date'=>"ALTER TABLE review_reminders ADD COLUMN due_date DATE NOT NULL DEFAULT '1970-01-01' AFTER suggested_minutes",
+          'status'=>"ALTER TABLE review_reminders ADD COLUMN status ENUM('pending','done','dismissed') NOT NULL DEFAULT 'pending' AFTER due_date",
+          'notified_at'=>'ALTER TABLE review_reminders ADD COLUMN notified_at DATETIME DEFAULT NULL AFTER status',
+          'completed_at'=>'ALTER TABLE review_reminders ADD COLUMN completed_at DATETIME DEFAULT NULL AFTER notified_at',
           'quality'=>"ALTER TABLE review_reminders ADD COLUMN quality ENUM('hard','good','easy') DEFAULT NULL AFTER completed_at",
+          'created_at'=>'ALTER TABLE review_reminders ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER quality',
+          'updated_at'=>'ALTER TABLE review_reminders ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at',
         ];
         foreach($adds as $col=>$sql) {
-            if(empty($cols[$col])) {
-                try { db()->exec($sql); } catch (Throwable $alterError) { error_log('Madar review schema alter '.$col.': '.$alterError->getMessage()); }
-            }
+            if(empty($cols[$col])) db()->exec($sql);
+        }
+
+        // ایندکس‌ها اگر از migration قبلی جا مانده باشند.
+        $idx=[]; foreach(db()->query('SHOW INDEX FROM review_reminders')->fetchAll() as $i) $idx[$i['Key_name']]=true;
+        if (empty($idx['uq_review_step'])) {
+            try { db()->exec('ALTER TABLE review_reminders ADD UNIQUE KEY uq_review_step (source_task_id, interval_days)'); } catch (Throwable $e) {}
+        }
+        if (empty($idx['idx_review_student_due'])) {
+            try { db()->exec('ALTER TABLE review_reminders ADD KEY idx_review_student_due (student_id, status, due_date)'); } catch (Throwable $e) {}
+        }
+        if (empty($idx['idx_review_source'])) {
+            try { db()->exec('ALTER TABLE review_reminders ADD KEY idx_review_source (source_task_id)'); } catch (Throwable $e) {}
         }
         return $ok = true;
     } catch (Throwable $e) { error_log('Madar review schema error: '.$e->getMessage()); return $ok = false; }
@@ -118,7 +143,7 @@ function review_is_eligible_task(array $t): bool
 function review_create_for_task(int $taskId): int
 {
     if (!review_schema_ready()) return 0;
-    $st = db()->prepare('SELECT t.*, p.status plan_status, s.name subj_name FROM tasks t JOIN plans p ON p.id=t.plan_id LEFT JOIN subjects s ON s.id=t.subject_id WHERE t.id=? LIMIT 1');
+    $st = db()->prepare('SELECT t.*, p.status plan_status, p.advisor_id, s.name subj_name FROM tasks t JOIN plans p ON p.id=t.plan_id LEFT JOIN subjects s ON s.id=t.subject_id WHERE t.id=? LIMIT 1');
     $st->execute([$taskId]);
     $t = $st->fetch();
     if (!$t || !review_is_eligible_task($t)) return 0;
@@ -129,9 +154,12 @@ function review_create_for_task(int $taskId): int
     $first = $t['completed_at'] ?: date('Y-m-d H:i:s');
     $baseDate = date('Y-m-d', strtotime($first));
     $profile = review_profile_for_task($t);
+    $exists = db()->prepare('SELECT id FROM review_reminders WHERE source_task_id=? AND interval_days=? LIMIT 1');
     $ins = db()->prepare('INSERT IGNORE INTO review_reminders (student_id,source_task_id,subject_id,topic_title,source,first_studied_at,interval_days,review_no,profile_key,profile_label,suggested_minutes,due_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
     $n = 0; $i = 1;
     foreach ($profile['intervals'] as $days) {
+        $exists->execute([(int)$t['id'], $days]);
+        if ($exists->fetch()) { $i++; continue; }
         $due = date('Y-m-d', strtotime($baseDate.' +'.$days.' day'));
         $ins->execute([(int)$t['student_id'], (int)$t['id'], $t['subject_id'] ?: null, (string)$t['title'], $t['source'] ?? null, $first, $days, $i++, $profile['key'], $profile['label'], (int)$profile['minutes'], $due]);
         $n += $ins->rowCount();
@@ -197,8 +225,30 @@ function review_complete_item(int $reviewId, int $studentId, string $quality='go
     // اگر مرور سخت بود، یک یادآور تقویتی کوتاه برای فردا بساز.
     if ($quality === 'hard') {
         $due = date('Y-m-d', strtotime('+1 day'));
-        $ins = db()->prepare('INSERT IGNORE INTO review_reminders (student_id,source_task_id,subject_id,topic_title,source,first_studied_at,interval_days,review_no,profile_key,profile_label,suggested_minutes,due_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-        $ins->execute([$studentId,(int)$r['source_task_id'],$r['subject_id'] ?: null,$r['topic_title'],$r['source'] ?? null,$r['first_studied_at'],0,99,$r['profile_key'] ?: 'reinforce','مرور تقویتی',10,$due]);
+        $chk = db()->prepare('SELECT id FROM review_reminders WHERE source_task_id=? AND interval_days=0 AND status="pending" LIMIT 1');
+        $chk->execute([(int)$r['source_task_id']]);
+        if (!$chk->fetch()) {
+            $ins = db()->prepare('INSERT IGNORE INTO review_reminders (student_id,source_task_id,subject_id,topic_title,source,first_studied_at,interval_days,review_no,profile_key,profile_label,suggested_minutes,due_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+            $ins->execute([$studentId,(int)$r['source_task_id'],$r['subject_id'] ?: null,$r['topic_title'],$r['source'] ?? null,$r['first_studied_at'],0,99,$r['profile_key'] ?: 'reinforce','مرور تقویتی',10,$due]);
+        }
     }
     return true;
+}
+
+function review_backfill_for_student(int $studentId): int
+{
+    if (!review_schema_ready()) return 0;
+    $st = db()->prepare("SELECT t.id FROM tasks t JOIN plans p ON p.id=t.plan_id
+        WHERE t.student_id=? AND p.status='published'
+          AND (t.completion_status IN ('full','partial') OR t.is_done=1)
+        ORDER BY t.completed_at DESC, t.id DESC LIMIT 250");
+    $st->execute([$studentId]);
+    $n = 0;
+    foreach ($st->fetchAll() as $r) $n += review_create_for_task((int)$r['id']);
+    return $n;
+}
+
+function review_items_for_advisor(int $studentId, string $scope='due'): array
+{
+    return review_items($studentId, $scope);
 }

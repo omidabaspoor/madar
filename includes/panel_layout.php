@@ -29,6 +29,7 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
             ['exams','آزمون‌ها','clipboard','admin/exams.php'],
             ['reports','گزارش‌ها','chart','admin/reports.php'],
             ['student_reports','گزارش حرفه‌ای','edit','admin/student_reports.php'],
+            ['reviews','مرورها','repeat','admin/reviews.php'],
             ['messages','پیام‌ها','message','admin/messages.php'],
         ],
         'other' => [

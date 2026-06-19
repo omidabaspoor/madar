@@ -195,8 +195,12 @@ function report_period_has_tasks(int $studentId, string $start, string $end): bo
 }
 function report_period_is_closed(int $studentId, string $start, string $end): bool
 {
-    // بسته یعنی همه تسک‌های بازه وضعیت گرفته‌اند: کامل، ناقص یا قرمز. pending یعنی هنوز زود است.
-    $st = db()->prepare("SELECT COUNT(*) FROM tasks t JOIN plans p ON p.id=t.plan_id WHERE t.student_id=? AND p.status='published' AND DATE_ADD(p.week_start, INTERVAL t.day_index DAY) BETWEEN ? AND ? AND COALESCE(t.completion_status,'pending')='pending'");
+    // بسته یعنی همه‌ی تسک‌های بازه واقعاً تعیین‌وضعیت شده‌اند: کامل، ناقص یا قرمز.
+    // داده‌های قدیمی ممکن است completion_status خالی/NULL داشته باشند؛ اگر is_done=1 باشد کامل حساب می‌شوند، وگرنه pending.
+    $st = db()->prepare("SELECT COUNT(*) FROM tasks t JOIN plans p ON p.id=t.plan_id
+        WHERE t.student_id=? AND p.status='published'
+          AND DATE_ADD(p.week_start, INTERVAL t.day_index DAY) BETWEEN ? AND ?
+          AND COALESCE(NULLIF(t.completion_status,''), IF(t.is_done=1,'full','pending')) NOT IN ('full','partial','missed')");
     $st->execute([$studentId,$start,$end]);
     return (int)$st->fetchColumn() === 0;
 }
@@ -334,6 +338,23 @@ function report_trend_label(float $cur, float $prev): string
     if ($d <= -8) return 'رو به افت';
     return 'تقریباً پایدار';
 }
+
+function report_pick(array $items, string $seed): string
+{
+    if (!$items) return '';
+    return $items[abs(crc32($seed)) % count($items)];
+}
+function report_method_notes(string $type, float $progress, float $testRatio, int $reviewTasks, ?float $sleep, ?float $stress): array
+{
+    $notes = [];
+    if ($testRatio < 70) $notes[] = 'یادآوری فعال/تست آموزشی را به مطالعه اضافه کن؛ فقط دوباره‌خوانی معمولاً ماندگاری کمتری می‌دهد.';
+    if ($reviewTasks <= 0) $notes[] = 'برای مطالب خواندنی، مرور فاصله‌دار ۱، ۳، ۷ و ۱۴ روزه باعث افت کمتر روی منحنی فراموشی می‌شود.';
+    if ($sleep !== null && $sleep < 6.5) $notes[] = 'خواب کم، تثبیت حافظه را ضعیف می‌کند؛ شب قبل و بعد از یادگیری را جدی بگیر.';
+    if ($stress !== null && $stress >= 7) $notes[] = 'استرس بالا را با آزمونک‌های کوتاه و قابل کنترل پایین بیاور؛ سنجش‌های کوچک اضطراب آزمون را کمتر می‌کنند.';
+    if ($progress >= 70 && $testRatio >= 70) $notes[] = 'الگوی خوب فعلی را با تست زمان‌دار، تحلیل غلط‌ها و مرور فاصله‌دار حفظ کن.';
+    return array_slice(array_values(array_unique($notes)), 0, 4);
+}
+
 function report_build_analysis(int $studentId, string $type, string $start, string $end, array $snapshot, array $advanced=[]): array
 {
     $prev = report_previous_period($type, $start);
@@ -364,6 +385,8 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
             'alerts'=>[['level'=>'warn','title'=>'داده کافی وجود ندارد','text'=>'برای این بازه هنوز تسک یا اجرای قابل تحلیل ثبت نشده است.']],
             'recommendations'=>['ابتدا برنامه یا تسک‌های این بازه را ثبت و اجرا کنید تا تحلیل قابل اعتماد ساخته شود.'],
             'summary'=>'برای این بازه هنوز داده کافی برای تحلیل وجود ندارد.',
+            'method_notes'=>['تحلیل هوشمند فقط وقتی قابل اعتماد است که برنامه و وضعیت اجرای واقعی ثبت شده باشد.'],
+            'action_plan'=>['ثبت وضعیت تسک‌های بازه','نوشتن علت اصلی اجرا نشدن','چیدن یک برنامه سبک برای بازگشت به جریان'],
         ];
     }
 
@@ -405,6 +428,9 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
     $balance = ($progress <= 0 || empty($subjects)) ? 0 : report_clamp(100 - min(65, count($weakSubjects)*14) - ($missedRate*.45));
 
     $byType = $snapshot['by_type'] ?? [];
+    $reviewTasks = (int)(($byType['review']['tasks'] ?? 0) + ($byType['reading']['tasks'] ?? 0));
+    $studyTasks = (int)(($byType['study']['tasks'] ?? 0) + ($byType['textbook']['tasks'] ?? 0) + ($byType['custom']['tasks'] ?? 0));
+    $activeRecallMix = $studyTasks > 0 ? min(100, (($byType['test']['tasks'] ?? 0) + $reviewTasks + ($byType['analysis']['tasks'] ?? 0)) / max(1,$studyTasks) * 100) : 0;
     $examLike = (int)(($byType['exam']['tasks'] ?? 0) + ($byType['mock']['tasks'] ?? 0));
     $analysisTasks = (int)($byType['analysis']['tasks'] ?? 0);
     $analysisQuality = $advanced['exam_analysis_quality'] ?? null;
@@ -433,6 +459,7 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
         'subject_balance'=>round($balance),
         'distraction_control'=>round($distractionScore),
         'exam_analysis'=>round($examScore),
+        'active_recall_mix'=>round(report_clamp($activeRecallMix)),
         'burnout_risk'=>round($burnout),
     ];
 
@@ -448,6 +475,7 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
     elseif ($burnout >= 45) $alerts[] = ['level'=>'warn','title'=>'ریسک افت متوسط','text'=>'بهتر است فشار برنامه، خواب و علت اجرا نشدن بررسی شود.'];
     if ($missedRate >= 25) $alerts[] = ['level'=>'danger','title'=>'تسک قرمز زیاد','text'=>'بخش قابل توجهی از برنامه اجرا نشده و باید اولویت‌بندی مجدد شود.'];
     if ($targetTests > 0 && $testsDone < $targetTests*.7) $alerts[] = ['level'=>'warn','title'=>'تست کمتر از هدف','text'=>'تعداد تست‌ها نسبت به هدف برنامه پایین‌تر است.'];
+    if ($studyTasks >= 3 && $activeRecallMix < 35 && $progress > 0) $alerts[] = ['level'=>'warn','title'=>'مطالعه غیرفعال زیاد','text'=>'نسبت تست/مرور/تحلیل به مطالعه پایین است؛ برای ماندگاری باید یادآوری فعال اضافه شود.'];
     if ($hasDistractionData && $waste >= 120) $alerts[] = ['level'=>'warn','title'=>'اتلاف وقت قابل توجه','text'=>'زمان موبایل یا حاشیه روی بازده مطالعه اثر گذاشته است.'];
     if ($progress < $prevProgress - 10) $alerts[] = ['level'=>'warn','title'=>'افت نسبت به بازه قبل','text'=>'عملکرد این بازه نسبت به بازه قبل کاهش محسوسی داشته است.'];
     if (!$hasRecoveryData) $alerts[] = ['level'=>'warn','title'=>'داده خواب و انرژی ثبت نشده','text'=>'برای تحلیل دقیق‌تر، خواب، انرژی، تمرکز و استرس این بازه باید ثبت شود.'];
@@ -472,6 +500,8 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
     }
 
     $recommendations = [];
+    $methodNotes = report_method_notes($type, $progress, $testRatio, $reviewTasks, $sleep, $stress);
+
     if ($progress <= 0) {
         if ($pendingRate >= 80) $recommendations[] = 'اولین اقدام: وضعیت واقعی تسک‌های این بازه را ثبت کن؛ اگر انجام نشده‌اند، علت اصلی را مشخص کن.';
         if ($missedRate >= 50) $recommendations[] = 'برای تسک‌های قرمز، یک برنامه جبرانی کوتاه با حداکثر ۲ تا ۳ اولویت اصلی بچینید.';
@@ -479,8 +509,10 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
         $recommendations[] = 'یک هدف کوچک فوری تعریف شود: فقط یک واحد کامل + یک بسته تست کوتاه.';
     } else {
         if ($weakSubjects) $recommendations[] = 'برای '. $weakSubjects[0]['name'] .' یک برنامه جبرانی کوتاه و پیوسته بچینید.';
-        if ($targetTests > 0 && $testsDone < $targetTests) $recommendations[] = 'تعداد تست را مرحله‌ای بالا ببرید و تست‌های زمان‌دار را جداگانه ثبت کنید.';
-        if ($analysisTasks < $examLike) $recommendations[] = 'بعد از آزمون/آزمونک، یک تسک تحلیل آزمون اجباری اضافه شود.';
+        if ($targetTests > 0 && $testsDone < $targetTests) $recommendations[] = report_pick(['تعداد تست را مرحله‌ای بالا ببرید و تست‌های زمان‌دار را جداگانه ثبت کنید.','برای هر مبحث، یک بسته تست آموزشی کوتاه بعد از مطالعه و یک بسته زمان‌دار آخر هفته بگذارید.','کمبود تست را با جبران سنگین یک‌روزه حل نکنید؛ در چند روز پخش کنید تا کیفیت تحلیل حفظ شود.'], $start.'tests');
+        if ($analysisTasks < $examLike) $recommendations[] = 'بعد از آزمون/آزمونک، تحلیل غلط‌ها را به سه دسته تقسیم کن: بی‌دقتی، ضعف مفهوم، ضعف زمان.';
+        if ($studyTasks >= 3 && $activeRecallMix < 35) $recommendations[] = 'برای هر جلسه مطالعه، ۱۰ دقیقه بازیابی از حافظه یا چند تست بدون نگاه به درسنامه اضافه کن.';
+        if ($reviewTasks <= 0 && $progress > 0) $recommendations[] = 'برای مطالب خواندنی همین بازه، مرورهای فاصله‌دار کوتاه در روزهای ۱، ۳ و ۷ ثبت شود.';
         if ($burnout >= 55) $recommendations[] = 'حجم برنامه بعدی کمی متعادل‌تر شود و خواب/استراحت جدی‌تر پیگیری شود.';
         if ($hasDistractionData && $distractionScore < 55) $recommendations[] = 'برای موبایل و حاشیه، بازه‌های بدون گوشی تعریف شود.';
     }
@@ -505,6 +537,13 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
     if ($strongSubjects && $progress > 0) $summaryBits[] = 'نقطه قوت: '.$strongSubjects[0]['name'].'.';
     $summaryBits[] = 'ریسک افت '.report_risk_label($burnout).' ارزیابی می‌شود.';
 
+    $actionPlan = [];
+    if ($weakSubjects) $actionPlan[] = 'اولویت ۱: '. $weakSubjects[0]['name'] .' با یک واحد سبک + تست آموزشی';
+    if ($targetTests > 0 && $testsDone < $targetTests) $actionPlan[] = 'اولویت ۲: جبران تست‌ها در بسته‌های ۲۰ تا ۳۰تایی، نه یک‌جا';
+    if ($reviewTasks <= 0 && $progress > 0) $actionPlan[] = 'اولویت ۳: ساخت مرور فاصله‌دار برای مباحث خواندنی';
+    if ($burnout >= 55) $actionPlan[] = 'اولویت کنترل فشار: یک بازه خواب/استراحت ثابت قبل از برنامه سنگین';
+    if (!$actionPlan) $actionPlan[] = 'حفظ روند فعلی + یک بهبود کوچک در تست زمان‌دار یا تحلیل غلط‌ها';
+
     return [
         'beta'=>true,
         'overall'=>$overall,
@@ -515,7 +554,9 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
         'weak_subjects'=>array_slice($weakSubjects,0,4),
         'strong_subjects'=>array_slice($strongSubjects,0,3),
         'alerts'=>$alerts,
-        'recommendations'=>array_slice(array_values(array_unique($recommendations)),0,6),
+        'recommendations'=>array_slice(array_values(array_unique($recommendations)),0,7),
+        'method_notes'=>$methodNotes,
+        'action_plan'=>array_slice($actionPlan,0,4),
         'summary'=>implode(' ', $summaryBits),
     ];
 }

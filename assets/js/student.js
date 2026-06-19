@@ -36,7 +36,8 @@
       else if (d.status==='partial') toast('ثبت شد؛ ناقص هم نصف امتیاز دارد ●','info',1900);
       else if (d.status==='missed') toast('عدم اجرا ثبت شد ✕','error',1700);
       if (d.needs_report && d.report_url) {
-        setTimeout(()=>{ if(confirm('گزارش روزانه آماده است. الان تکمیلش می‌کنی؟')) location.href=d.report_url; }, 700);
+        const lbl = d.report_label ? `گزارش ${d.report_label}` : 'گزارش';
+        setTimeout(()=>{ if(confirm(`${lbl} آماده است. الان تکمیلش می‌کنی؟`)) location.href=d.report_url; }, 700);
       }
       return d;
     } catch(err) {

@@ -65,6 +65,8 @@ panel_start('گزارش حرفه‌ای', $student['full_name'].' · '.report_ty
       <div class="insight-mini-row"><?php foreach(['execution'=>'اجرا','consistency'=>'ثبات','tests'=>'تست','recovery'=>'خواب/انرژی','subject_balance'=>'تعادل','burnout_risk'=>'ریسک افت'] as $k=>$lbl): ?><span><?= e($lbl) ?>: <b><?= fa_num($an['scores'][$k]??0) ?>٪</b></span><?php endforeach; ?></div>
       <?php if($an['alerts']): ?><div class="insight-alerts compact"><?php foreach($an['alerts'] as $al): ?><div class="ia <?= e($al['level']) ?>"><b><?= e($al['title']) ?></b><span><?= e($al['text']) ?></span></div><?php endforeach; ?></div><?php endif; ?>
       <div class="insight-recs"><b>پیشنهادها</b><ul><?php foreach($an['recommendations'] as $rec): ?><li><?= e($rec) ?></li><?php endforeach; ?></ul></div>
+      <?php if(!empty($an['action_plan'])): ?><div class="insight-recs action"><b>نقشه اقدام</b><ul><?php foreach($an['action_plan'] as $rec): ?><li><?= e($rec) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
+      <?php if(!empty($an['method_notes'])): ?><div class="insight-method"><b><?= icon('book',16) ?> پشتوانه تحلیلی</b><?php foreach($an['method_notes'] as $note): ?><span><?= e($note) ?></span><?php endforeach; ?></div><?php endif; ?>
     </div>
   </div>
   <?php endif; ?>

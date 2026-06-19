@@ -26,7 +26,7 @@ if (!$studentId) {
           <tr>
             <td><span class="badge <?= $i<3?'badge-gold':'' ?>"><?= fa_num($i+1) ?></span></td>
             <td><div class="u-row"><span class="u-ava <?= $i==0?'gold':'' ?>"><?= e(avatar_letters($s['full_name'])) ?></span><span style="font-weight:700"><?= e($s['full_name']) ?></span></div></td>
-            <td><?= fa_num(((float)$s['done_tasks']==floor((float)$s['done_tasks']))?(int)$s['done_tasks']:number_format((float)$s['done_tasks'],1)) ?> / <?= fa_num($s['total_tasks']) ?></td>
+            <td><?= fa_num(score_display((float)$s['done_tasks'])) ?> / <?= fa_num($s['total_tasks']) ?></td>
             <td><span class="mini-status ok">✓ <?= fa_num($s['full_tasks']) ?></span> <span class="mini-status partial">● <?= fa_num($s['partial_tasks']) ?></span> <span class="mini-status missed">× <?= fa_num($s['missed_tasks']) ?></span></td>
             <td><span class="badge badge-gold"><?= icon('fire',13) ?> <?= fa_num($s['streak']) ?></span></td>
             <td style="min-width:150px"><div class="between" style="gap:10px"><div class="progress" style="flex:1"><span data-w="<?= $pct ?>" style="width:0"></span></div><span style="font-size:.82rem;font-weight:700"><?= fa_num($pct) ?>٪</span></div></td>
