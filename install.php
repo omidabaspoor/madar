@@ -16,6 +16,24 @@ function pdo_root(): PDO {
     ]);
 }
 
+/** اجرای فایل SQL چنددستوری؛ برای seedهای نصب/ارتقا */
+function execute_sql_file(PDO $pdo, string $path): int {
+    if (!is_file($path)) return 0;
+    $sql = file_get_contents($path);
+    if ($sql === false || trim($sql) === '') return 0;
+
+    // حذف کامنت‌های خطی تا split روی ; تمیزتر انجام شود.
+    $sql = preg_replace('/^\s*--.*$/m', '', $sql) ?? $sql;
+    $statements = array_filter(array_map('trim', explode(';', $sql)));
+    $done = 0;
+    foreach ($statements as $stmt) {
+        if ($stmt === '') continue;
+        $pdo->exec($stmt);
+        $done++;
+    }
+    return $done;
+}
+
 function synchronize_database_schema(PDO $pdo, array &$messages): void {
     // 1. Create any missing tables or execute schema.sql in chunks
     $schemaSql = file_get_contents(__DIR__ . '/sql/schema.sql');
@@ -154,6 +172,13 @@ if ($run) {
 
     // 2) همگام‌سازی و ارتقای ساختار جداول (بدون از دست رفتن داده‌ها)
     synchronize_database_schema($pdo, $messages);
+
+    // 2b) seed دقیق فصل‌های درسی از فایل SQL استخراج‌شده از HTML ارسالی
+    $chapterSeedSql = __DIR__ . '/sql/seed_chapters_curriculum.sql';
+    if (is_file($chapterSeedSql)) {
+        execute_sql_file($pdo, $chapterSeedSql);
+        $messages[] = 'فصل‌های درسی پایه‌های ۱۰ تا ۱۲ از فایل SQL در دیتابیس همگام شد.';
+    }
 
     // 3) داده‌ی نمونه (فقط اگر کاربری نیست)
     $exists = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
@@ -318,10 +343,13 @@ if ($run) {
         $messages[] = 'آزمون جامع نمونه ساخته شد.';
     }
 
-    // فصل‌های درسی (برای نصب‌های جدید و قدیمی — idempotent)
-    require_once __DIR__ . '/includes/chapter_data.php';
-    $seeded = seed_system_chapters();
-    $messages[] = 'فصل‌های درسی ('.fa_num($seeded).' فصل) در سیستم بررسی/ثبت شد.';
+    // فصل‌های درسی: منبع اصلی فایل SQL است؛ fallback فقط برای حالتی است که فایل SQL روی هاست نباشد.
+    if (!is_file($chapterSeedSql)) {
+        require_once __DIR__ . '/includes/models.php';
+        require_once __DIR__ . '/includes/chapter_data.php';
+        $seeded = seed_system_chapters();
+        $messages[] = 'فصل‌های درسی PHP-seed بررسی شد؛ '.fa_num($seeded).' مورد تکمیلی اضافه شد.';
+    }
 
     $messages[] = '✅ نصب و همگام‌سازی با موفقیت کامل شد!';
     $messages[] = 'ورود مشاور →  نام‌کاربری: <b>sajjad</b>  |  گذرواژه: <b>madar@1404</b>';
