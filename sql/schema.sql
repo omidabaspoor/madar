@@ -1,5 +1,5 @@
 -- =============================================================
---  مَدار · Madar Study OS — Database Schema
+--  مَدار · Madar Study OS — Consolidated Master Schema
 --  Konkur Task Manager — Dr. Sajjad Sayyadi
 --  MySQL 5.7+/8.0  | utf8mb4
 -- =============================================================
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
   mood            VARCHAR(20)  DEFAULT NULL,            -- حال امروز
   mood_date       DATE DEFAULT NULL,                       -- تاریخ ثبت حال روزانه
   streak          INT UNSIGNED NOT NULL DEFAULT 0,
-  last_active      DATE DEFAULT NULL,
+  last_active     DATE DEFAULT NULL,
   remember_token  VARCHAR(64) DEFAULT NULL,
   created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -49,6 +49,42 @@ CREATE TABLE IF NOT EXISTS subjects (
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_subj_advisor (advisor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
+--  advisor_settings : تنظیمات و پیش‌فرض‌های برنامه‌ریزی هر مشاور
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS advisor_settings (
+  id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  advisor_id  INT UNSIGNED NOT NULL,
+  skey        VARCHAR(60) NOT NULL,
+  svalue      VARCHAR(255) DEFAULT NULL,
+  updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_advisor_key (advisor_id, skey),
+  KEY idx_setting_advisor (advisor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
+--  planner_memory : حافظه‌ی هوشمند برنامه‌ریزی (یادگیری انتخاب‌های مشاور)
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS planner_memory (
+  id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  advisor_id  INT UNSIGNED NOT NULL,
+  scope       VARCHAR(20) NOT NULL DEFAULT 'global',
+  ctx_key     VARCHAR(60) NOT NULL DEFAULT '*',
+  task_type   VARCHAR(20) DEFAULT NULL,
+  subject_id  INT UNSIGNED DEFAULT NULL,
+  target_count INT DEFAULT NULL,
+  target_unit VARCHAR(20) DEFAULT NULL,
+  duration_min INT DEFAULT NULL,
+  priority    VARCHAR(10) DEFAULT NULL,
+  source      VARCHAR(120) DEFAULT NULL,
+  hits        INT UNSIGNED NOT NULL DEFAULT 1,
+  updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_mem (advisor_id, scope, ctx_key),
+  KEY idx_mem_advisor (advisor_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------
@@ -209,6 +245,10 @@ CREATE TABLE IF NOT EXISTS exams (
   advisor_id      INT UNSIGNED NOT NULL,
   title           VARCHAR(160) NOT NULL,
   description     VARCHAR(255) DEFAULT NULL,
+  creation_mode   VARCHAR(30) NOT NULL DEFAULT 'standard', -- standard | quick_sheet
+  sheet_path      VARCHAR(255) DEFAULT NULL,           -- مسیر فایل آپلود شده در آزمون تصویرمحور
+  sheet_paths_json TEXT DEFAULT NULL,                  -- آرایه JSON صفحات چندتایی آپلودشده (سامورایی)
+  answer_key      VARCHAR(500) DEFAULT NULL,           -- کلید پاسخنامه سریع
   exam_type       ENUM('single','comprehensive') NOT NULL DEFAULT 'single',
   timing_mode     ENUM('total','per_section') NOT NULL DEFAULT 'total',
   duration_min    INT UNSIGNED NOT NULL DEFAULT 60,    -- زمان کل (وقتی timing_mode=total)
@@ -296,6 +336,8 @@ CREATE TABLE IF NOT EXISTS exam_answers (
   question_id     INT UNSIGNED NOT NULL,
   selected_opt    TINYINT UNSIGNED DEFAULT NULL,       -- 1..4 یا NULL (نزده)
   flagged         TINYINT(1) NOT NULL DEFAULT 0,       -- علامت‌گذاری برای مرور
+  diagnostic_reason VARCHAR(60) DEFAULT NULL,          -- ریشه‌یابی و علت اشتباه (سامورایی)
+  diagnostic_takeaway VARCHAR(500) DEFAULT NULL,       -- نکته طلایی یادگرفته‌شده (سامورایی)
   updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_answer (attempt_id, question_id),
@@ -307,22 +349,21 @@ CREATE TABLE IF NOT EXISTS exam_answers (
 -- ----------------------------------------------------------
 --  student_reports : گزارش‌های خودکار و پیشرفته دانش‌آموز
 -- ----------------------------------------------------------
--- Upgrade: advanced student reporting system
 CREATE TABLE IF NOT EXISTS student_reports (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  student_id INT UNSIGNED NOT NULL,
-  report_type ENUM('daily','weekly','monthly') NOT NULL DEFAULT 'daily',
-  period_start DATE NOT NULL,
-  period_end DATE NOT NULL,
+  id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  student_id      INT UNSIGNED NOT NULL,
+  report_type     ENUM('daily','weekly','monthly') NOT NULL DEFAULT 'daily',
+  period_start    DATE NOT NULL,
+  period_end      DATE NOT NULL,
   auto_snapshot_json LONGTEXT NULL,
-  advanced_json LONGTEXT NULL,
-  status ENUM('draft','submitted') NOT NULL DEFAULT 'draft',
-  submitted_at DATETIME DEFAULT NULL,
-  advisor_note TEXT NULL,
-  reviewed_by INT UNSIGNED DEFAULT NULL,
-  reviewed_at DATETIME DEFAULT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  advanced_json   LONGTEXT NULL,
+  status          ENUM('draft','submitted') NOT NULL DEFAULT 'draft',
+  submitted_at    DATETIME DEFAULT NULL,
+  advisor_note    TEXT NULL,
+  reviewed_by     INT UNSIGNED DEFAULT NULL,
+  reviewed_at     DATETIME DEFAULT NULL,
+  created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_student_report (student_id, report_type, period_start),
   KEY idx_report_student (student_id, report_type, period_start),
@@ -330,31 +371,29 @@ CREATE TABLE IF NOT EXISTS student_reports (
   CONSTRAINT fk_report_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-
 -- ----------------------------------------------------------
 --  review_reminders : مرورهای فاصله‌دار
 -- ----------------------------------------------------------
--- Upgrade: spaced repetition review reminders
 CREATE TABLE IF NOT EXISTS review_reminders (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  student_id INT UNSIGNED NOT NULL,
-  source_task_id INT UNSIGNED NOT NULL,
-  subject_id INT UNSIGNED DEFAULT NULL,
-  topic_title VARCHAR(180) NOT NULL,
-  source VARCHAR(160) DEFAULT NULL,
+  id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  student_id      INT UNSIGNED NOT NULL,
+  source_task_id  INT UNSIGNED NOT NULL,
+  subject_id      INT UNSIGNED DEFAULT NULL,
+  topic_title     VARCHAR(180) NOT NULL,
+  source          VARCHAR(160) DEFAULT NULL,
   first_studied_at DATETIME NOT NULL,
-  interval_days INT UNSIGNED NOT NULL,
-  review_no TINYINT UNSIGNED NOT NULL DEFAULT 1,
-  profile_key VARCHAR(40) DEFAULT NULL,
-  profile_label VARCHAR(80) DEFAULT NULL,
+  interval_days   INT UNSIGNED NOT NULL,
+  review_no       TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  profile_key     VARCHAR(40) DEFAULT NULL,
+  profile_label   VARCHAR(80) DEFAULT NULL,
   suggested_minutes INT UNSIGNED DEFAULT 15,
-  due_date DATE NOT NULL,
-  status ENUM('pending','done','dismissed') NOT NULL DEFAULT 'pending',
-  notified_at DATETIME DEFAULT NULL,
-  completed_at DATETIME DEFAULT NULL,
-  quality ENUM('hard','good','easy') DEFAULT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  due_date        DATE NOT NULL,
+  status          ENUM('pending','done','dismissed') NOT NULL DEFAULT 'pending',
+  notified_at     DATETIME DEFAULT NULL,
+  completed_at    DATETIME DEFAULT NULL,
+  quality         ENUM('hard','good','easy') DEFAULT NULL,
+  created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_review_step (source_task_id, interval_days),
   KEY idx_review_student_due (student_id, status, due_date),

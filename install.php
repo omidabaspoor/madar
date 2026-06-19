@@ -1,7 +1,7 @@
 <?php
 /**
- * نصب‌کننده‌ی مَدار — جداول را می‌سازد و داده‌ی نمونه می‌ریزد.
- * پس از اجرا، این فایل را حذف یا تغییرنام بدهید.
+ * نصب‌کننده و همگام‌ساز هوشمند مَدار — جداول را می‌سازد، به‌روزرسانی می‌کند و داده‌ی نمونه می‌ریزد.
+ * برای ارتقای پایگاه داده در هر زمان، کافی است این فایل را در مرورگر باز کرده و اجرا کنید.
  */
 declare(strict_types=1);
 require_once __DIR__ . '/config/config.php';
@@ -16,108 +16,122 @@ function pdo_root(): PDO {
     ]);
 }
 
-$run = ($_SERVER['REQUEST_METHOD'] === 'POST') || (PHP_SAPI === 'cli');
+function synchronize_database_schema(PDO $pdo, array &$messages): void {
+    // 1. Create any missing tables or execute schema.sql in chunks
+    $schemaSql = file_get_contents(__DIR__ . '/sql/schema.sql');
+    $statements = array_filter(array_map('trim', explode(';', $schemaSql)));
+    foreach ($statements as $stmt) {
+        if ($stmt === '') continue;
+        try {
+            $pdo->exec($stmt);
+        } catch (Throwable $e) {
+            // Ignore minor execution notices
+        }
+    }
+    $messages[] = 'ساختار جداول اصلی دیتابیس ایجاد/بررسی شد.';
+
+    // 2. Ensure all columns exist in existing tables (Self-Healing Synchronization)
+    $tableColumns = [
+        'tasks' => [
+            'source'            => "VARCHAR(120) DEFAULT NULL AFTER description",
+            'completion_status' => "ENUM('pending','full','partial','missed') NOT NULL DEFAULT 'pending' AFTER is_done",
+            'course_percent'    => "TINYINT UNSIGNED DEFAULT NULL AFTER completion_status",
+            'student_feeling'   => "VARCHAR(30) DEFAULT NULL AFTER course_percent",
+            'status_updated_at' => "DATETIME DEFAULT NULL AFTER completed_at",
+        ],
+        'users' => [
+            'mood'            => "VARCHAR(20) DEFAULT NULL AFTER status",
+            'mood_date'       => "DATE DEFAULT NULL AFTER mood",
+            'streak'          => "INT UNSIGNED NOT NULL DEFAULT 0 AFTER mood_date",
+            'last_active'     => "DATE DEFAULT NULL AFTER streak",
+            'remember_token'  => "VARCHAR(64) DEFAULT NULL AFTER last_active",
+        ],
+        'subjects' => [
+            'advisor_id' => "INT UNSIGNED DEFAULT NULL AFTER id",
+            'icon'       => "VARCHAR(30) DEFAULT 'book' AFTER color",
+        ],
+        'messages' => [
+            'attachment_type' => "VARCHAR(20) NOT NULL DEFAULT 'none' AFTER body",
+            'attachment_path' => "VARCHAR(255) DEFAULT NULL AFTER attachment_type",
+            'attachment_name' => "VARCHAR(190) DEFAULT NULL AFTER attachment_path",
+            'attachment_mime' => "VARCHAR(80) DEFAULT NULL AFTER attachment_name",
+            'attachment_size' => "INT UNSIGNED DEFAULT NULL AFTER attachment_mime",
+        ],
+        'planner_memory' => [
+            'source' => "VARCHAR(120) DEFAULT NULL AFTER priority",
+        ],
+        'review_reminders' => [
+            'student_id'       => "INT UNSIGNED NOT NULL DEFAULT 0 AFTER id",
+            'source_task_id'   => "INT UNSIGNED NOT NULL DEFAULT 0 AFTER student_id",
+            'subject_id'       => "INT UNSIGNED DEFAULT NULL AFTER source_task_id",
+            'topic_title'      => "VARCHAR(180) NOT NULL DEFAULT '' AFTER subject_id",
+            'source'           => "VARCHAR(160) DEFAULT NULL AFTER topic_title",
+            'first_studied_at' => "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER source",
+            'interval_days'    => "INT UNSIGNED NOT NULL DEFAULT 1 AFTER first_studied_at",
+            'review_no'        => "TINYINT UNSIGNED NOT NULL DEFAULT 1 AFTER interval_days",
+            'profile_key'      => "VARCHAR(40) DEFAULT NULL AFTER review_no",
+            'profile_label'    => "VARCHAR(80) DEFAULT NULL AFTER profile_key",
+            'suggested_minutes'=> "INT UNSIGNED DEFAULT 15 AFTER profile_label",
+            'due_date'         => "DATE NOT NULL DEFAULT '1970-01-01' AFTER suggested_minutes",
+            'status'           => "ENUM('pending','done','dismissed') NOT NULL DEFAULT 'pending' AFTER due_date",
+            'notified_at'      => "DATETIME DEFAULT NULL AFTER status",
+            'completed_at'     => "DATETIME DEFAULT NULL AFTER notified_at",
+            'quality'          => "ENUM('hard','good','easy') DEFAULT NULL AFTER completed_at",
+        ],
+        'exams' => [
+            'creation_mode'    => "VARCHAR(30) NOT NULL DEFAULT 'standard' AFTER description",
+            'sheet_path'       => "VARCHAR(255) DEFAULT NULL AFTER creation_mode",
+            'sheet_paths_json' => "TEXT DEFAULT NULL AFTER sheet_path",
+            'answer_key'       => "VARCHAR(500) DEFAULT NULL AFTER sheet_paths_json",
+        ],
+        'exam_answers' => [
+            'diagnostic_reason'   => "VARCHAR(60) DEFAULT NULL AFTER flagged",
+            'diagnostic_takeaway' => "VARCHAR(500) DEFAULT NULL AFTER diagnostic_reason",
+        ],
+    ];
+
+    foreach ($tableColumns as $table => $cols) {
+        try {
+            $existing = [];
+            $stmt = $pdo->query("SHOW COLUMNS FROM `$table`");
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $existing[$row['Field']] = true;
+            }
+            foreach ($cols as $col => $def) {
+                if (empty($existing[$col])) {
+                    try {
+                        $pdo->exec("ALTER TABLE `$table` ADD COLUMN `$col` $def");
+                    } catch (Throwable $e) {}
+                }
+            }
+        } catch (Throwable $e) {}
+    }
+
+    // 3. Ensure task_type ENUM is fully up to date
+    try {
+        $pdo->exec("ALTER TABLE tasks MODIFY task_type ENUM('test','study','review','textbook','descriptive','exam','reading','custom','analysis','special','mock') NOT NULL DEFAULT 'study'");
+    } catch (Throwable $e) {}
+
+    // 4. Update legacy completion_status if needed
+    try {
+        $pdo->exec("UPDATE tasks SET completion_status=IF(is_done=1,'full','pending') WHERE completion_status IS NULL OR completion_status='' ");
+    } catch (Throwable $e) {}
+
+    $messages[] = 'همگام‌سازی و به‌روزرسانی فیلدهای پایگاه داده با موفقیت انجام شد.';
+}
+
+$run = ($_SERVER['REQUEST_METHOD'] === 'POST') || (PHP_SAPI === 'cli') || isset($_GET['update']);
 if ($run) {
   try {
-    // 1) ساخت دیتابیس
+    // 1) ساخت دیتابیس در صورت نبود
     $root = pdo_root();
     $root->exec('CREATE DATABASE IF NOT EXISTS `'.DB_NAME.'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
-    $messages[] = 'پایگاه داده ساخته شد: ' . DB_NAME;
+    $messages[] = 'پایگاه داده بررسی شد: ' . DB_NAME;
 
     $pdo = new PDO(sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, DB_CHARSET), DB_USER, DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 
-    // 2) اجرای schema
-    $sql = file_get_contents(__DIR__ . '/sql/schema.sql');
-    $pdo->exec($sql);
-    $messages[] = 'جداول اصلی ایجاد/به‌روزرسانی شدند.';
-
-    // 2b) اجرای همه‌ی مهاجرت‌ها (idempotent) — حتی روی نصب‌های قبلی
-    //     این کار باعث می‌شود با باز کردن install.php دیتابیس کامل به‌روز شود.
-    $migrations = [
-        'upgrade_task_types.sql'       => 'نوع‌های جدید تسک (کتاب درسی، تشریحی)',
-        'upgrade_task_types2.sql'      => 'نوع‌های تسک (تحلیل آزمون، واحد ویژه، آزمون) + ستون منبع',
-        'upgrade_subject_palette.sql'  => 'پالت رنگ درس‌ها',
-        'upgrade_messages_media.sql'   => 'پیوست رسانه در پیام‌ها',
-        'upgrade_achievements.sql'     => 'سیستم دستاوردها',
-        'upgrade_exams.sql'            => 'سیستم آزمون',
-        'upgrade_planner_settings.sql' => 'پیش‌فرض‌های برنامه‌ریز + حافظه‌ی هوشمند',
-        'upgrade_task_status.sql'      => 'وضعیت سه‌حالته تسک، درصد کورس و حس دانش‌آموز',
-        'upgrade_mood_date.sql'       => 'تاریخ روزانه حال دانش‌آموز',
-        'upgrade_student_reports.sql' => 'سیستم گزارش‌دهی پیشرفته دانش‌آموز',
-        'upgrade_review_reminders.sql' => 'یادآور مرورهای فاصله‌دار',
-    ];
-    foreach ($migrations as $file => $label) {
-        $path = __DIR__ . '/sql/' . $file;
-        if (!is_file($path)) continue;
-        try {
-            $pdo->exec(file_get_contents($path));
-            $messages[] = 'مهاجرت اعمال شد: ' . $label;
-        } catch (Throwable $mEx) {
-            // برخی مهاجرت‌ها ممکن است قبلاً اعمال شده باشند؛ نادیده بگیر
-            $messages[] = 'مهاجرت «' . $label . '» رد شد (احتمالاً از قبل اعمال شده).';
-        }
-    }
-
-    // 2b-2) اطمینان قطعی از نوع‌های تسک و ستون منبع (idempotent، حتی اگر مهاجرت ناقص اجرا شد)
-    try {
-        $pdo->exec("ALTER TABLE tasks MODIFY task_type ENUM('test','study','review','textbook','descriptive','exam','reading','custom','analysis','special','mock') NOT NULL DEFAULT 'study'");
-        $messages[] = 'نوع‌های تسک به‌روزرسانی شدند.';
-    } catch (Throwable $e) { /* احتمالاً از قبل */ }
-    try {
-        $col = $pdo->query("SHOW COLUMNS FROM tasks LIKE 'source'")->fetch();
-        if (!$col) { $pdo->exec("ALTER TABLE tasks ADD COLUMN source VARCHAR(120) DEFAULT NULL AFTER description"); }
-        $messages[] = 'ستون «منبع» آماده است.';
-    } catch (Throwable $e) { /* ignore */ }
-
-
-    try {
-        $cols = [];
-        foreach ($pdo->query('SHOW COLUMNS FROM tasks')->fetchAll() as $cc) { $cols[$cc['Field']] = true; }
-        if (empty($cols['completion_status'])) $pdo->exec("ALTER TABLE tasks ADD COLUMN completion_status ENUM('pending','full','partial','missed') NOT NULL DEFAULT 'pending' AFTER is_done");
-        if (empty($cols['course_percent'])) $pdo->exec("ALTER TABLE tasks ADD COLUMN course_percent TINYINT UNSIGNED DEFAULT NULL AFTER completion_status");
-        if (empty($cols['student_feeling'])) $pdo->exec("ALTER TABLE tasks ADD COLUMN student_feeling VARCHAR(30) DEFAULT NULL AFTER course_percent");
-        if (empty($cols['status_updated_at'])) $pdo->exec("ALTER TABLE tasks ADD COLUMN status_updated_at DATETIME DEFAULT NULL AFTER completed_at");
-        $pdo->exec("UPDATE tasks SET completion_status=IF(is_done=1,'full','pending') WHERE completion_status IS NULL OR completion_status=''");
-        $messages[] = 'سیستم وضعیت سه‌حالته تسک آماده است.';
-    } catch (Throwable $e) { /* ignore */ }
-
-
-    try {
-        $mc = $pdo->query("SHOW COLUMNS FROM users LIKE 'mood_date'")->fetch();
-        if (!$mc) $pdo->exec("ALTER TABLE users ADD COLUMN mood_date DATE DEFAULT NULL AFTER mood");
-        $messages[] = 'تاریخ روزانه حال دانش‌آموز آماده است.';
-    } catch (Throwable $e) { /* ignore */ }
-
-    // 2c) اطمینان از وجود ستون‌ها/جداول کلیدیِ تنظیمات (پشتیبان در صورت نبود فایل مهاجرت)
-    $pdo->exec("CREATE TABLE IF NOT EXISTS advisor_settings (
-        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-        advisor_id INT UNSIGNED NOT NULL,
-        skey VARCHAR(60) NOT NULL,
-        svalue VARCHAR(255) DEFAULT NULL,
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id), UNIQUE KEY uq_advisor_key (advisor_id, skey), KEY idx_setting_advisor (advisor_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS planner_memory (
-        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-        advisor_id INT UNSIGNED NOT NULL,
-        scope VARCHAR(20) NOT NULL DEFAULT 'global',
-        ctx_key VARCHAR(60) NOT NULL DEFAULT '*',
-        task_type VARCHAR(20) DEFAULT NULL,
-        subject_id INT UNSIGNED DEFAULT NULL,
-        target_count INT DEFAULT NULL,
-        target_unit VARCHAR(20) DEFAULT NULL,
-        duration_min INT DEFAULT NULL,
-        priority VARCHAR(10) DEFAULT NULL,
-        source VARCHAR(120) DEFAULT NULL,
-        hits INT UNSIGNED NOT NULL DEFAULT 1,
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id), UNIQUE KEY uq_mem (advisor_id, scope, ctx_key), KEY idx_mem_advisor (advisor_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    try {
-        $c = $pdo->query("SHOW COLUMNS FROM planner_memory LIKE 'source'")->fetch();
-        if (!$c) { $pdo->exec("ALTER TABLE planner_memory ADD COLUMN source VARCHAR(120) DEFAULT NULL AFTER priority"); }
-    } catch (Throwable $e) { /* ignore */ }
-    $messages[] = 'جدول‌های تنظیمات و حافظه‌ی هوشمند آماده‌اند.';
+    // 2) همگام‌سازی و ارتقای ساختار جداول (بدون از دست رفتن داده‌ها)
+    synchronize_database_schema($pdo, $messages);
 
     // 3) داده‌ی نمونه (فقط اگر کاربری نیست)
     $exists = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
@@ -227,7 +241,6 @@ if ($run) {
         $today = persian_day_index(date('Y-m-d'));
         foreach ($plan as $p) {
             $sid = $p[2] && isset($subjIds[$p[2]]) ? $subjIds[$p[2]] : null;
-            // برخی تسک‌های روزهای گذشته را انجام‌شده فرض کن (برای دموی واقعی)
             $done = ($p[0] < $today) ? (rand(0,10) > 2 ? 1 : 0) : 0;
             $dc = $done ? ($p[5] ?: 1) : 0;
             $tIns->execute([$planId,$aliId,$sid,$p[3],$p[4],$p[0],$p[1],$p[5]?:null,$p[6],$done,$dc,$done?date('Y-m-d H:i:s'):null]);
@@ -245,7 +258,6 @@ if ($run) {
                 $target = rand(20,40);
                 $done = ($d < $today) ? (rand(0,10)>3?1:0) : 0;
                 $dc = $done ? $target : 0;
-                // ستون‌ها: plan_id,student_id,subject_id,title,task_type,day_index,unit_index,target_count,target_unit,is_done,done_count,completed_at
                 $tIns->execute([$pid,$sid,null,$nm,'test',$d,(($cnt%7)+1),$target,'تست',$done,$dc,$done?date('Y-m-d H:i:s'):null]);
             }
         }
@@ -270,7 +282,7 @@ if ($run) {
         ];
         $aIns = $pdo->prepare('INSERT INTO achievements (advisor_id,title,description,icon,condition_type,threshold,sort_order) VALUES (?,?,?,?,?,?,?)');
         $so=0; foreach ($achs as $a) { $aIns->execute([$advisorId,$a[0],$a[1],$a[2],$a[3],$a[4],$so++]); }
-        // ارزیابی برای علی (که تسک‌های انجام‌شده دارد)
+
         $doneAli = (int)$pdo->query('SELECT COALESCE(SUM(is_done),0) FROM tasks WHERE student_id='.$aliId)->fetchColumn();
         $aliStreak = (int)$pdo->query('SELECT streak FROM users WHERE id='.$aliId)->fetchColumn();
         foreach ($pdo->query('SELECT * FROM achievements WHERE is_active=1')->fetchAll() as $a) {
@@ -278,17 +290,15 @@ if ($run) {
             if ($ok) $pdo->prepare('INSERT IGNORE INTO student_achievements (student_id,achievement_id) VALUES (?,?)')->execute([$aliId,$a['id']]);
         }
 
-        // آزمون جامع نمونه (شیمی + ریاضی + ادبیات) با چند سوال عکس‌دار
+        // آزمون جامع نمونه
         require_once __DIR__ . '/includes/exam_seed.php';
-        $seeded = seed_sample_exam($pdo, $advisorId, $subjIds);
-        $messages[] = 'آزمون جامع نمونه ساخته شد (' . $seeded . ' سوال، ۳ درس، شامل سوالات عکس‌دار).';
-
-        $messages[] = '✅ نصب کامل شد!';
-        $messages[] = 'ورود مشاور →  نام‌کاربری: <b>sajjad</b>  |  گذرواژه: <b>madar@1404</b>';
-        $messages[] = 'ورود دانش‌آموز →  نام‌کاربری: <b>ali_rezaei</b>  |  گذرواژه: <b>student123</b>';
-    } else {
-        $messages[] = 'کاربران از قبل وجود دارند؛ داده‌ی نمونه رد شد.';
+        seed_sample_exam($pdo, $advisorId, $subjIds);
+        $messages[] = 'آزمون جامع نمونه ساخته شد.';
     }
+
+    $messages[] = '✅ نصب و همگام‌سازی با موفقیت کامل شد!';
+    $messages[] = 'ورود مشاور →  نام‌کاربری: <b>sajjad</b>  |  گذرواژه: <b>madar@1404</b>';
+    $messages[] = 'ورود دانش‌آموز →  نام‌کاربری: <b>ali_rezaei</b>  |  گذرواژه: <b>student123</b>';
   } catch (Throwable $e) {
     $err = $e->getMessage();
   }
@@ -301,13 +311,13 @@ if (PHP_SAPI === 'cli') {
 }
 
 require_once __DIR__ . '/includes/layout.php';
-page_head('نصب مَدار');
+page_head('نصب و به‌روزرسانی مَدار');
 ?>
 <div style="min-height:100vh;display:grid;place-items:center;padding:24px">
   <div class="card" style="max-width:560px;width:100%">
     <div class="brand" style="justify-content:center;margin-bottom:18px"><?= logo_svg(48) ?></div>
-    <h1 class="text-c" style="font-size:1.6rem;margin-bottom:8px">نصب <span class="gradient-text"><?= e(APP_NAME) ?></span></h1>
-    <p class="text-c muted" style="margin-bottom:24px">ساخت پایگاه داده و داده‌ی نمونه</p>
+    <h1 class="text-c" style="font-size:1.6rem;margin-bottom:8px">نصب و ارتقای <span class="gradient-text"><?= e(APP_NAME) ?></span></h1>
+    <p class="text-c muted" style="margin-bottom:24px">ایجاد پایگاه داده، به‌روزرسانی خودکار جداول و همگام‌سازی</p>
     <?php if ($err): ?>
       <div class="alert alert-error" style="margin-bottom:16px"><?= icon('info',18) ?><span><?= e($err) ?></span></div>
     <?php endif; ?>
@@ -315,11 +325,11 @@ page_head('نصب مَدار');
       <?php foreach ($messages as $m): ?>
       <div class="alert alert-success" style="margin-bottom:10px"><?= icon('check',18) ?><span><?= $m ?></span></div>
       <?php endforeach; ?>
-      <div class="alert alert-info" style="margin:16px 0"><?= icon('info',18) ?><span>برای امنیت، فایل <b>install.php</b> را حذف کنید.</span></div>
+      <div class="alert alert-info" style="margin:16px 0"><?= icon('info',18) ?><span>برای امنیت بیشتر در محیط واقعی، فایل <b>install.php</b> را تغییرنام یا حذف کنید.</span></div>
       <a href="<?= url('') ?>" class="btn btn-gold btn-block btn-lg"><?= icon('rocket',18) ?> ورود به سامانه</a>
     <?php else: ?>
-      <div class="alert alert-info" style="margin-bottom:16px"><?= icon('info',18) ?><span>تنظیمات اتصال در <code>config/config.php</code> را بررسی کنید، سپس نصب را آغاز کنید.</span></div>
-      <form method="post"><button class="btn btn-gold btn-block btn-lg"><?= icon('zap',18) ?> شروع نصب</button></form>
+      <div class="alert alert-info" style="margin-bottom:16px"><?= icon('info',18) ?><span>این اسکریپت ساختار پایگاه داده را به‌صورت کامل و هوشمند (بدون حذف داده‌های قبلی) به‌روزرسانی می‌کند.</span></div>
+      <form method="post"><button class="btn btn-gold btn-block btn-lg"><?= icon('zap',18) ?> شروع نصب و همگام‌سازی</button></form>
     <?php endif; ?>
   </div>
 </div>

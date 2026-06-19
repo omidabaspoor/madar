@@ -69,7 +69,24 @@ panel_start('گزارش‌دهی پیشرفته', report_type_label($type).' · 
 <div class="modal-backdrop" id="insightModal">
   <div class="modal insight-modal">
     <div class="modal-head"><h3><?= icon('sparkles',20) ?> تحلیل هوشمند مَدار <span class="beta-pill">بتا</span></h3><button class="modal-close" data-close><?= icon('close',18) ?></button></div>
-    <div class="insight-score-head"><b><?= fa_num($analysis['overall']) ?>٪</b><span><?= e($analysis['overall_label']) ?></span></div>
+    <div class="insight-score-head" style="display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:center;background:var(--surface-2);border:1px solid var(--border-soft);padding:18px 24px;border-radius:var(--r-lg);margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="background:var(--gold-glass);color:var(--gold);width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:900;box-shadow:0 0 16px rgba(217,178,95,0.2)">
+          <?= fa_num($analysis['overall']) ?>٪
+        </div>
+        <div style="text-align:r">
+          <div style="font-size:.78rem;color:var(--gold);text-transform:uppercase;letter-spacing:1px;font-weight:700">شاخص بازدهی و کیفیت مطالعاتی</div>
+          <div style="font-size:1.1rem;font-weight:900;color:var(--text-1);margin-top:2px">نمره ارزیابی کلی سیستم</div>
+        </div>
+      </div>
+      
+      <div style="text-align:l">
+        <div style="font-size:.78rem;color:var(--text-3)">ارزیابی وضعیت برنامه:</div>
+        <span class="badge badge-gold" style="font-size:1rem;padding:6px 16px;font-weight:800;margin-top:4px;display:inline-block">
+          <?= e($analysis['overall_label']) ?>
+        </span>
+      </div>
+    </div>
     <p class="insight-summary"><?= e($analysis['summary']) ?></p>
     <div class="insight-grid">
       <?php foreach(['execution'=>'اجرای برنامه','consistency'=>'ثبات','tests'=>'تست‌زنی','study_quality'=>'کیفیت مطالعه','recovery'=>'خواب و انرژی','subject_balance'=>'تعادل درس‌ها','distraction_control'=>'کنترل حاشیه'] as $k=>$lbl): $v=(int)($analysis['scores'][$k]??0); ?>
