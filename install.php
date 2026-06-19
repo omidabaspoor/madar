@@ -30,6 +30,28 @@ function synchronize_database_schema(PDO $pdo, array &$messages): void {
     }
     $messages[] = 'ساختار جداول اصلی دیتابیس ایجاد/بررسی شد.';
 
+    // 2a. Ensure chapters table exists (if upgrading from older install)
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS chapters (
+          id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+          subject_name VARCHAR(80) NOT NULL,
+          grade INT UNSIGNED NOT NULL,
+          field VARCHAR(30) NOT NULL,
+          book_name VARCHAR(120) NOT NULL,
+          chapter_name VARCHAR(200) NOT NULL,
+          sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+          is_system TINYINT(1) NOT NULL DEFAULT 1,
+          advisor_id INT UNSIGNED DEFAULT NULL,
+          is_active TINYINT(1) NOT NULL DEFAULT 1,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          KEY idx_chap_subject (subject_name, grade, field, is_active),
+          KEY idx_chap_advisor (advisor_id),
+          KEY idx_chap_book (book_name, sort_order)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (Throwable $e) {}
+
     // 2. Ensure all columns exist in existing tables (Self-Healing Synchronization)
     $tableColumns = [
         'tasks' => [
@@ -295,6 +317,11 @@ if ($run) {
         seed_sample_exam($pdo, $advisorId, $subjIds);
         $messages[] = 'آزمون جامع نمونه ساخته شد.';
     }
+
+    // فصل‌های درسی (برای نصب‌های جدید و قدیمی — idempotent)
+    require_once __DIR__ . '/includes/chapter_data.php';
+    $seeded = seed_system_chapters();
+    $messages[] = 'فصل‌های درسی ('.fa_num($seeded).' فصل) در سیستم بررسی/ثبت شد.';
 
     $messages[] = '✅ نصب و همگام‌سازی با موفقیت کامل شد!';
     $messages[] = 'ورود مشاور →  نام‌کاربری: <b>sajjad</b>  |  گذرواژه: <b>madar@1404</b>';

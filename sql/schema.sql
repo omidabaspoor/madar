@@ -400,4 +400,26 @@ CREATE TABLE IF NOT EXISTS review_reminders (
   KEY idx_review_source (source_task_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ----------------------------------------------------------
+--  chapters : فصل‌های کتاب‌های درسی (دهم تا دوازدهم)
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS chapters (
+  id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  subject_name  VARCHAR(80) NOT NULL,
+  grade         INT UNSIGNED NOT NULL,
+  field         VARCHAR(30) NOT NULL,
+  book_name     VARCHAR(120) NOT NULL,
+  chapter_name  VARCHAR(200) NOT NULL,
+  sort_order    INT UNSIGNED NOT NULL DEFAULT 0,
+  is_system     TINYINT(1) NOT NULL DEFAULT 1,
+  advisor_id    INT UNSIGNED DEFAULT NULL,
+  is_active     TINYINT(1) NOT NULL DEFAULT 1,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_chap_subject (subject_name, grade, field, is_active),
+  KEY idx_chap_advisor (advisor_id),
+  KEY idx_chap_book (book_name, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
