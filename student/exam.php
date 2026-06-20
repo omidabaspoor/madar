@@ -8,7 +8,7 @@ $u = current_user();
 
 $examId = (int)($_GET['id'] ?? 0);
 $exam = get_exam($examId);
-if (!$exam || $exam['status'] !== 'published') { flash('error','آزمون در دسترس نیست'); redirect('student/exams.php'); }
+if (!$exam || $exam['status'] !== 'published' || !student_exam_is_visible($examId, (int)$u['id'])) { flash('error','آزمون در دسترس نیست'); redirect('student/exams.php'); }
 $now = time();
 if ($exam['start_at'] && strtotime($exam['start_at']) > $now) { flash('error','آزمون هنوز شروع نشده'); redirect('student/exams.php'); }
 if ($exam['end_at'] && strtotime($exam['end_at']) < $now) { flash('error','مهلت آزمون تمام شده'); redirect('student/exams.php'); }

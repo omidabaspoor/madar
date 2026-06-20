@@ -123,10 +123,16 @@ function synchronize_database_schema(PDO $pdo, array &$messages): void {
             'sheet_path'       => "VARCHAR(255) DEFAULT NULL AFTER creation_mode",
             'sheet_paths_json' => "TEXT DEFAULT NULL AFTER sheet_path",
             'answer_key'       => "VARCHAR(500) DEFAULT NULL AFTER sheet_paths_json",
+            'target_fields_json' => "TEXT DEFAULT NULL AFTER assign_all",
+            'target_grades_json' => "TEXT DEFAULT NULL AFTER target_fields_json",
         ],
         'exam_answers' => [
             'diagnostic_reason'   => "VARCHAR(60) DEFAULT NULL AFTER flagged",
             'diagnostic_takeaway' => "VARCHAR(500) DEFAULT NULL AFTER diagnostic_reason",
+        ],
+        'mock_exam_reports' => [
+            'total_questions' => "INT UNSIGNED DEFAULT NULL AFTER participants",
+            'issues_json' => "LONGTEXT NULL AFTER analysis_json",
         ],
     ];
 

@@ -15,6 +15,8 @@ $u = current_user();
 $examId = (int)($_GET['id'] ?? 0);
 $exam = get_exam($examId);
 if (!$exam || $exam['status'] !== 'published') { flash('error','آزمون یافت نشد یا منتشر نشده است'); redirect('student/exams.php'); }
+if ($u['role'] === 'student' && !student_exam_is_visible($examId, (int)$u['id'])) { flash('error','آزمون در دسترس نیست'); redirect('student/exams.php'); }
+if (in_array($u['role'], ['advisor','admin'], true) && $u['role'] !== 'admin' && (int)$exam['advisor_id'] !== (int)$u['id']) { flash('error','دسترسی غیرمجاز است'); redirect('admin/exams.php'); }
 
 $sections  = exam_sections($examId);
 $questions = exam_questions($examId);

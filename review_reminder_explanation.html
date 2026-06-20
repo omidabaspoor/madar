@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>توضیح سیستم یادآوری مرور مَدار</title>
+<style>
+@font-face{font-family:Vazir;src:url('assets/fonts/Vazirmatn.woff2') format('woff2');font-weight:100 900}
+*{box-sizing:border-box} body{margin:0;background:#0c1512;color:#eef4ef;font-family:Vazir,Tahoma,sans-serif;line-height:1.8;padding:28px}
+.card{max-width:1120px;margin:auto;background:radial-gradient(circle at 15% 0%,rgba(203,172,128,.18),transparent 30%),linear-gradient(135deg,#14231c,#0f1b16);border:1px solid rgba(203,172,128,.28);border-radius:28px;padding:30px;box-shadow:0 24px 80px rgba(0,0,0,.35)}
+h1{margin:0 0 8px;font-size:30px;color:#e0c595;font-weight:1000} .sub{color:#b9c8bf;margin-bottom:24px;font-weight:700}
+.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:22px 0}.box{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:16px;min-height:150px;position:relative}.box b{display:block;color:#e0c595;font-size:16px;margin-bottom:8px}.num{position:absolute;left:12px;top:12px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#cbac80;color:#141006;font-weight:1000}.arrow{display:none}.profiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}.profile{background:rgba(107,136,114,.12);border:1px solid rgba(107,136,114,.28);border-radius:16px;padding:14px}.profile b{color:#9fc7aa}.profile span{display:block;color:#d5dfd8;font-size:13px}.note{background:rgba(203,172,128,.10);border:1px dashed rgba(203,172,128,.35);border-radius:18px;padding:16px;margin-top:20px;color:#f3ead8;font-weight:800}
+@media(max-width:900px){.flow,.profiles{grid-template-columns:1fr}.box{min-height:auto}}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>سیستم یادآوری مرور در مَدار چطور کار می‌کند؟</h1>
+<div class="sub">مدل سیستم بر پایه‌ی «مرور فاصله‌دار» است؛ یعنی بعد از یادگیری هر مبحث، مرورهای بعدی در زمان‌هایی ساخته می‌شوند که احتمال فراموشی بالا می‌رود.</div>
+<div class="flow">
+  <div class="box"><span class="num">۱</span><b>دانش‌آموز تسک را انجام می‌دهد</b>وقتی تسک مطالعاتی با وضعیت «کامل» یا «ناقص» ثبت شود، سیستم آن را بررسی می‌کند.</div>
+  <div class="box"><span class="num">۲</span><b>تشخیص نوع تسک</b>فقط مباحث قابل مرور وارد سیستم می‌شوند؛ تست، آزمون، تحلیل آزمون، روزخوانی و واحد ویژه فیلتر می‌شوند تا یادآوری اضافی ساخته نشود.</div>
+  <div class="box"><span class="num">۳</span><b>انتخاب الگوی مرور</b>سیستم از روی درس و نوع مبحث، برنامه مرور مناسب می‌سازد؛ مثلاً ریاضی/فیزیک با فواصل تمرینی، زیست/شیمی با مرور سریع‌تر.</div>
+  <div class="box"><span class="num">۴</span><b>تنظیم بر اساس کیفیت اجرا</b>اگر دانش‌آموز بگوید مبحث سخت بود یا ناقص انجام شد، مرورها فشرده‌تر و زودتر می‌شوند.</div>
+  <div class="box"><span class="num">۵</span><b>ارسال یادآوری در موعد</b>وقتی تاریخ مرور برسد، دانش‌آموز اعلان می‌گیرد و مورد در صفحه مرورها نمایش داده می‌شود.</div>
+</div>
+<div class="profiles">
+  <div class="profile"><b>ریاضی / فیزیک</b><span>فواصل نمونه: ۳، ۱۰، ۲۵، ۶۰ روز</span><span>تمرکز: حل تست و بازیابی مهارتی</span></div>
+  <div class="profile"><b>زیست / شیمی</b><span>فواصل نمونه: ۲، ۷، ۱۶، ۳۵، ۷۵ روز</span><span>تمرکز: تثبیت نکات فرّار</span></div>
+  <div class="profile"><b>دینی / ادبیات / عربی / زبان</b><span>فواصل نمونه: ۱، ۵، ۱۴، ۳۰، ۶۰ روز</span><span>تمرکز: مرور حفظی کنکوری</span></div>
+  <div class="profile"><b>مبحث سخت یا ناقص</b><span>فواصل نمونه: ۱، ۴، ۱۰، ۲۰، ۴۰ روز</span><span>تمرکز: مرور نجات و جلوگیری از افت</span></div>
+</div>
+<div class="note">برای جلوگیری از شلوغی، اگر برای یک مبحث در چند روز نزدیک قبلاً زنجیره مرور ساخته شده باشد، سیستم دوباره یادآوری تکراری نمی‌سازد. اگر دانش‌آموز یک مرور را «سخت» ثبت کند، یک مرور تقویتی برای فردای آن هم ساخته می‌شود.</div>
+</div>
+</body>
+</html>

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS exams (
   show_review TINYINT(1) NOT NULL DEFAULT 1, shuffle_questions TINYINT(1) NOT NULL DEFAULT 0,
   start_at DATETIME DEFAULT NULL, end_at DATETIME DEFAULT NULL,
   status ENUM('draft','published','closed') NOT NULL DEFAULT 'draft', assign_all TINYINT(1) NOT NULL DEFAULT 1,
+  target_fields_json TEXT DEFAULT NULL, target_grades_json TEXT DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id), KEY idx_exam_advisor (advisor_id), KEY idx_exam_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
