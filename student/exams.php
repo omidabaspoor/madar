@@ -40,9 +40,13 @@ panel_start('آزمون‌ها', 'آزمون‌های تو', 'student', 'exams',
     </div>
     <div class="mt-4">
       <?php if($taken): ?>
-        <div class="between" style="margin-bottom:10px"><span class="muted" style="font-size:.82rem">درصد کل</span><span class="fw-800 gold" style="font-size:1.2rem"><?= fa_num(round($e['total_score'])) ?>٪</span></div>
+        <div class="between" style="margin-bottom:10px"><span class="muted" style="font-size:.82rem">درصد کل</span><span class="fw-800 gold" style="font-size:1.2rem"><?= fa_num(round((float)$e['total_score'])) ?>٪</span></div>
         <?php if($e['show_review']):?>
         <a href="<?= url('student/exam_result.php?attempt='.(int)$e['attempt_id']) ?>" class="btn btn-ghost btn-block"><?= icon('chart',16) ?> مشاهده کارنامه و پاسخنامه</a>
+        <div class="flex items-center gap-2 mt-2 wrap">
+          <a href="<?= url('student/exam_pdf.php?id='.(int)$e['id']) ?>" target="_blank" class="btn btn-ghost btn-sm flex-1 text-center flex items-center justify-center gap-1.5 border-sage/40 text-sage" style="font-size: .78rem; font-weight: bold;"><?= icon('clipboard',14) ?> PDF سوالات</a>
+          <a href="<?= url('student/exam_solution_pdf.php?attempt='.(int)$e['attempt_id']) ?>" target="_blank" class="btn btn-gold btn-sm flex-1 text-center flex items-center justify-center gap-1.5 shadow-2xs" style="font-size: .78rem; font-weight: bold;"><?= icon('star',14) ?> PDF کارنامه و پاسخنامه</a>
+        </div>
         <?php else:?>
         <button class="btn btn-ghost btn-block" disabled>پاسخنامه در دسترس نیست</button>
         <?php endif;?>

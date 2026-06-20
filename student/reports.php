@@ -37,6 +37,18 @@ panel_start('گزارش‌دهی پیشرفته', report_type_label($type).' · 
   <?php endforeach; ?>
 </div>
 
+<div class="between wrap gap-3 mb-6" style="background:var(--surface-1); padding:16px 24px; border-radius:var(--r-md); border:1px solid var(--border);">
+  <div class="flex items-center gap-3">
+    <?= icon('chart', 20, 'text-gold') ?>
+    <b style="font-size: 1.05rem; color: var(--text);">خروجی چاپی عملکرد و تحلیل هوشمند مَدار:</b>
+  </div>
+  <div class="flex items-center gap-3 wrap">
+    <a href="<?= url('admin/student_report_pdf.php?student=' . $u['id'] . '&type=' . $type) ?>" target="_blank" class="btn btn-gold flex items-center gap-2 shadow-lg" style="font-weight: 900;">
+      <?= icon('pie', 18) ?> <span>دریافت PDF گزارش پیشرفته و تحلیل مَدار</span>
+    </a>
+  </div>
+</div>
+
 <?php if($pending): ?>
 <div class="panel report-due mb-4">
   <b><?= icon('bell',18) ?> گزارش‌های در انتظار</b>

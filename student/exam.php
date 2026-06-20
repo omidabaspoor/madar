@@ -28,7 +28,7 @@ foreach ($sections as $sec) {
     foreach ($questions as $q) {
         if ((int)$q['section_id'] !== (int)$sec['id']) continue;
         $globalNum++;
-        $q['gnum'] = $globalNum;
+        $q['gnum'] = $q['question_number'] !== null ? (int)$q['question_number'] : $globalNum;
         $qBySection[(int)$sec['id']][] = $q;
         $flatQ[] = $q;
     }
@@ -62,8 +62,9 @@ page_head('آزمون: ' . $exam['title'], '', ['exam.css']);
 
   <!-- ===== Top Bar ===== -->
   <header class="exam-bar between wrap gap-3" style="align-items:center;background:var(--surface-2);border-bottom:1px solid var(--border-soft);padding:12px 20px;transition:all 0.2s">
-    <div class="exam-bar-info flex gap-3" style="align-items:center">
+    <div class="exam-bar-info flex gap-3 wrap" style="align-items:center">
       <a href="<?= url('student/exams.php') ?>" class="btn btn-ghost btn-sm flex gap-1" style="color:var(--text-2);align-items:center"><?= icon('arrow-right',16) ?> خروج</a>
+      <a href="<?= url('student/exam_pdf.php?id=' . $examId) ?>" target="_blank" class="btn btn-ghost btn-sm flex gap-1" style="border-color:var(--sage); color:var(--sage-light); font-weight:bold; align-items:center" title="چاپ یا دریافت PDF دفترچه سوالات"><?= icon('clipboard',16) ?> <span>خروجی PDF سوالات</span></a>
       <div class="eb-title" style="font-size:1.2rem;font-weight:900;color:var(--gold-light)"><?= e($exam['title']) ?></div>
       <div class="eb-sub badge badge-sage"><span id="answeredCount" style="font-weight:900">۰</span> / <?= fa_num($totalQ) ?> پاسخ‌داده</div>
     </div>
@@ -79,10 +80,10 @@ page_head('آزمون: ' . $exam['title'], '', ['exam.css']);
   </header>
 
   <!-- =================================================================
-       SAMURAI DUAL-PANEL LAYOUT (For Batch Quick Sheet Exams)
+       SMART DUAL-PANEL LAYOUT (For Batch Quick Sheet Exams)
        ================================================================= -->
   <?php if ($mode==='quick_sheet' || !empty($sheetArr)): ?>
-    <div class="grid gap-4 exam-samurai-layout" style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 450px), 1fr));height:calc(100vh - 75px);padding:20px;max-width:1600px;margin:0 auto">
+    <div class="grid gap-4 exam-smart-layout exam-samurai-layout" style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 450px), 1fr));height:calc(100vh - 75px);padding:20px;max-width:1600px;margin:0 auto">
       
       <!-- پنل راست: دفترچه سوالات تعاملی با زوم و اسکرول و ورق‌زدن -->
       <section class="booklet-viewer-panel panel flex" style="flex-direction:column;padding:0;background:var(--surface-1);border:1px solid var(--border-soft);border-radius:var(--r-lg);overflow:hidden;position:relative;transition:all 0.2s">
@@ -171,7 +172,7 @@ page_head('آزمون: ' . $exam['title'], '', ['exam.css']);
         </div>
         
         <div style="padding:16px 20px;background:var(--surface-2);border-top:1px solid var(--border-soft)">
-          <button type="button" class="btn btn-gold btn-block btn-lg" id="finishSamuraiExamBtn" style="font-weight:900;font-size:1.1rem;padding:14px">
+          <button type="button" class="btn btn-gold btn-block btn-lg" id="finishSmartExamBtn" style="font-weight:900;font-size:1.1rem;padding:14px">
             <?= icon('check',20) ?> اتمام و ثبت نهایی پاسخ‌برگ
           </button>
         </div>

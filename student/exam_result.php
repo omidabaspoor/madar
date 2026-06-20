@@ -16,7 +16,17 @@ $showAnswers = (int)$rep['exam']['show_review'] === 1;
 
 panel_start('کارنامه آزمون', $rep['exam']['title'], 'student', 'exams', ['student.css','exam.css','result.css']);
 ?>
-<div class="mb-4"><a href="<?= url('student/exams.php') ?>" class="btn btn-ghost btn-sm"><?= icon('arrow-right',16) ?> بازگشت به آزمون‌ها</a></div>
+<div class="between wrap gap-3 mb-6" style="background:var(--surface-1); padding:16px 24px; border-radius:var(--r-md); border:1px solid var(--border);">
+  <a href="<?= url('student/exams.php') ?>" class="btn btn-ghost btn-sm" style="font-weight:bold;"><?= icon('arrow-right',16) ?> بازگشت به لیست آزمون‌ها</a>
+  <div class="flex items-center gap-3 wrap">
+    <a href="<?= url('student/exam_pdf.php?id=' . $rep['exam']['id']) ?>" target="_blank" class="btn btn-ghost flex items-center gap-2" style="border-color:var(--sage); color:var(--sage-light); font-weight:800;">
+      <?= icon('clipboard', 18) ?> <span>خروجی PDF دفترچه سوالات</span>
+    </a>
+    <a href="<?= url('student/exam_solution_pdf.php?attempt=' . $attemptId) ?>" target="_blank" class="btn btn-gold flex items-center gap-2 shadow-lg" style="font-weight:900;">
+      <?= icon('star', 18) ?> <span>خروجی PDF کارنامه و پاسخنامه</span>
+    </a>
+  </div>
+</div>
 <?php render_result($rep, $showAnswers); ?>
 <?php if(!$showAnswers): ?>
 <div class="panel" style="margin-top:18px"><div class="empty-state"><div class="es-ico"><?= icon('lock',28) ?></div>پاسخنامه‌ی این آزمون توسط مشاور غیرفعال شده است.</div></div>
