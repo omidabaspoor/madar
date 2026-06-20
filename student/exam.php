@@ -75,6 +75,7 @@ page_head('آزمون: ' . $exam['title'], '', ['exam.css']);
         <?= icon('clock',20) ?> <span id="timerText">--:--</span>
       </div>
       <?php endif; ?>
+      <button type="button" class="btn btn-ghost btn-sm flex gap-1 text-c" id="replayExamTour" style="font-weight:900"><?= icon('info',16) ?> راهنما</button>
       <button class="btn btn-gold btn-lg flex gap-1 text-c" id="finishBtn" style="font-weight:900;padding:0 24px"><?= icon('check',18) ?> پایان و ثبت آزمون</button>
     </div>
   </header>
@@ -240,28 +241,23 @@ page_head('آزمون: ' . $exam['title'], '', ['exam.css']);
   <?php endif; ?>
 </div>
 
-<!-- ===== INTELLIGENT INTERACTIVE ONBOARDING TOUR OVERLAY ===== -->
-<div id="examOnboardingTourOverlay" class="panel hidden" style="position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(12,21,18,0.85);backdrop-filter:blur(8px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;transition:all 0.3s">
-  <div class="tour-card panel" style="background:var(--surface-1);border:2px solid var(--gold);border-radius:24px;padding:36px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.8);position:relative">
-    <span class="absolute badge badge-gold flex gap-1" style="top:16px;right:20px;font-weight:900;font-size:.85rem;align-items:center"><?= icon('sparkles',16) ?> تور آموزشی هوشمند مَدار</span>
-    <button type="button" class="btn btn-ghost btn-sm absolute skip-tour-btn" id="skipTourBtn" style="top:16px;left:20px;color:var(--text-3);padding:0;width:30px;height:30px;font-weight:bold" title="رد کردن تور">×</button>
-
-    <div class="tour-content text-c mt-3 mb-4">
-      <div id="tourIco" style="font-size:3.5rem;color:var(--gold);margin-bottom:16px;transition:all 0.3s"><?= icon('image',56) ?></div>
-      <h3 id="tourTitle" style="font-size:1.4rem;font-weight:900;color:var(--text-1);margin-bottom:12px;min-height:32px"></h3>
-      <p id="tourText" class="muted text-r" style="font-size:.9۵rem;line-height:1.8;min-height:90px;font-weight:700;border:1px solid var(--surface-2);padding:16px;border-radius:12px;background:var(--surface-2)"></p>
+<!-- ===== Clean desktop/mobile onboarding tour ===== -->
+<div id="examOnboardingTourOverlay" class="exam-tour-overlay hidden" aria-modal="true" role="dialog">
+  <div class="exam-tour-card panel">
+    <div class="exam-tour-top">
+      <span class="badge badge-gold"><?= icon('sparkles',16) ?> راهنمای سریع آزمون</span>
+      <button type="button" class="btn btn-ghost btn-sm skip-tour-btn" id="skipTourBtn" title="بستن راهنما">×</button>
     </div>
-
-    <div class="between mt-4 pt-3 wrap gap-2" style="border-top:1px solid var(--surface-2);align-items:center">
-      <div class="tour-dots flex gap-1" style="direction:ltr">
-        <span class="tour-dot" data-step="0" style="width:10px;height:10px;border-radius:50%;background:var(--surface-2);display:block"></span>
-        <span class="tour-dot" data-step="1" style="width:10px;height:10px;border-radius:50%;background:var(--surface-2);display:block"></span>
-        <span class="tour-dot" data-step="2" style="width:10px;height:10px;border-radius:50%;background:var(--surface-2);display:block"></span>
-      </div>
-
+    <div class="tour-content">
+      <div id="tourIco" class="exam-tour-ico"><?= icon('image',48) ?></div>
+      <h3 id="tourTitle"></h3>
+      <p id="tourText" class="muted"></p>
+    </div>
+    <div class="exam-tour-foot">
+      <div class="tour-dots" id="tourDots" aria-label="مراحل راهنما"></div>
       <div class="flex gap-2">
-        <button type="button" class="btn btn-ghost btn-sm" id="prevTourStepBtn" disabled>◀ قبلی</button>
-        <button type="button" class="btn btn-gold btn-lg" id="nextTourStepBtn" style="font-weight:900;padding:0 24px">گام بعدی ▶</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="prevTourStepBtn" disabled>قبلی</button>
+        <button type="button" class="btn btn-gold" id="nextTourStepBtn">بعدی</button>
       </div>
     </div>
   </div>

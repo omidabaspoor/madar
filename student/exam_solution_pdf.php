@@ -351,7 +351,7 @@ function printSolution() {
     <?php endif; ?>
 
     <!-- نمودار کلان آسیب‌شناسی -->
-    <?php if (array_sum($diagCounts) > 0): ?>
+    <?php if (false && array_sum($diagCounts) > 0): ?>
     <div class="card" style="margin-top: 4mm; background: rgba(255,255,255,0.9);">
       <h3 style="font-size: 16px; color: var(--dark); margin-bottom: 10px;">خلاصه ریشه‌یابی و آسیب‌شناسی اشتباهات آزمون</h3>
       <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">

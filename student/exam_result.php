@@ -27,6 +27,15 @@ panel_start('کارنامه آزمون', $rep['exam']['title'], 'student', 'exam
     </a>
   </div>
 </div>
+<div class="panel" style="border-color:rgba(203,172,128,.35);background:linear-gradient(135deg,rgba(203,172,128,.12),rgba(107,136,114,.08));margin-bottom:18px">
+  <div class="between wrap gap-3" style="align-items:center">
+    <div>
+      <h3 style="margin-bottom:6px;color:var(--gold-light)"><?= icon('chart',18) ?> تحلیل آزمون داخلی مَدار</h3>
+      <p class="muted">کارنامه آماده است؛ حالا ۲ دقیقه وقت بگذار و تحلیل رفتاری آزمونت را پر کن تا برنامه اقدام و گزارش کامل برای مشاور ارسال شود.</p>
+    </div>
+    <a class="btn btn-gold" href="<?= url('student/internal_exam_analysis.php?attempt='.$attemptId) ?>"><?= icon('sparkles',16) ?> تکمیل تحلیل آزمون</a>
+  </div>
+</div>
 <?php render_result($rep, $showAnswers); ?>
 <?php if(!$showAnswers): ?>
 <div class="panel" style="margin-top:18px"><div class="empty-state"><div class="es-ico"><?= icon('lock',28) ?></div>پاسخنامه‌ی این آزمون توسط مشاور غیرفعال شده است.</div></div>
