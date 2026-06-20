@@ -180,6 +180,27 @@ if ($run) {
         $messages[] = 'فصل‌های درسی پایه‌های ۱۰ تا ۱۲ از فایل SQL در دیتابیس همگام شد.';
     }
 
+    // 2c) اضافه کردن درس «ریاضی جامع» + فصل‌ها (هر بار که install.php اجرا شود)
+    $riaziJameSql = __DIR__ . '/sql/upgrade_riazi_jame_chapters.sql';
+    if (is_file($riaziJameSql)) {
+        execute_sql_file($pdo, $riaziJameSql);
+        $messages[] = 'درس و فصل‌های «ریاضی جامع» (از تصویر) به دیتابیس اضافه/به‌روزرسانی شد.';
+    }
+
+    // 2d) آپگرید سیستم چندمشاوری + لاگ فعالیت (جدید)
+    $multiAdvisorSql = __DIR__ . '/sql/upgrade_multi_advisor_logs.sql';
+    if (is_file($multiAdvisorSql)) {
+        execute_sql_file($pdo, $multiAdvisorSql);
+        $messages[] = 'سیستم چندمشاوری + لاگ فعالیت فعال شد.';
+    }
+
+    // 2e) آپگرید کنترل دسترسی مشاوران (جدید)
+    $accessSql = __DIR__ . '/sql/upgrade_advisor_access.sql';
+    if (is_file($accessSql)) {
+        execute_sql_file($pdo, $accessSql);
+        $messages[] = 'سیستم کنترل دسترسی مشاوران فعال شد.';
+    }
+
     // 3) داده‌ی نمونه (فقط اگر کاربری نیست)
     $exists = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
     if ($exists === 0) {
@@ -198,6 +219,8 @@ if ($run) {
             ['حسابان','#6E5B9A','target'], ['هندسه','#4F8C86','target'], ['گسسته','#8A6A52','target'],
             // عمومی‌ها
             ['هویت','#6F6F78','user'], ['سلامت','#C06C84','heart'], ['عربی','#A0754C','book'], ['دینی','#7A5AA6','heart'], ['ادبیات','#9A5A8A','book'], ['زبان انگلیسی','#5578A6','globe'],
+            // درس جدید درخواست‌شده
+            ['ریاضی جامع','#2E5A8C','target'],
         ];
         $subjIds = [];
         $sIns = $pdo->prepare('INSERT INTO subjects (advisor_id,name,color,icon) VALUES (?,?,?,?)');
