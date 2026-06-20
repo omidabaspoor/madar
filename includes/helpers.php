@@ -40,6 +40,36 @@ function asset(string $path): string
     return url('assets/' . $path) . $q;
 }
 
+function local_image_data_uri(?string $path): string
+{
+    if (empty($path)) return '';
+    $path = ltrim(trim($path), '/');
+    if (($pos = strpos($path, '?')) !== false) {
+        $path = substr($path, 0, $pos);
+    }
+    
+    $full = __DIR__ . '/../' . $path;
+    if (!file_exists($full) && !str_starts_with($path, 'assets/')) {
+        $full = __DIR__ . '/../assets/' . $path;
+    }
+    
+    if (file_exists($full) && is_file($full)) {
+        $ext = strtolower(pathinfo($full, PATHINFO_EXTENSION));
+        $mime = match($ext) {
+            'png' => 'image/png',
+            'jpg','jpeg' => 'image/jpeg',
+            'svg' => 'image/svg+xml',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            default => 'image/png'
+        };
+        $base64 = base64_encode(file_get_contents($full));
+        return "data:$mime;base64,$base64";
+    }
+
+    return url($path);
+}
+
 function redirect(string $path): never { header('Location: ' . (str_starts_with($path, 'http') ? $path : url($path))); exit; }
 
 function json_out($data, int $code = 200): never

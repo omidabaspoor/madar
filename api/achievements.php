@@ -2,6 +2,7 @@
 /** API دستاوردها (مشاور): ساخت/ویرایش/حذف + اعطا/لغو دستی */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/models.php';
+require_once __DIR__ . '/../includes/log.php';
 boot_session();
 require_role('advisor','admin');
 require_csrf();

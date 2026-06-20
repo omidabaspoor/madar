@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/models.php';
+require_once __DIR__ . '/../includes/log.php';
 boot_session();
 require_role('advisor','admin');
 $u = current_user();
@@ -21,18 +22,22 @@ switch ($action) {
     case 'approve':
         db()->prepare('UPDATE users SET status="active", advisor_id=COALESCE(advisor_id,?) WHERE id=?')->execute([$u['id'],$id]);
         notify($id, 'حساب شما تأیید شد ✅', 'مشاور شما را تأیید کرد. برنامه‌ات به‌زودی آماده می‌شود.', 'success', 'student/dashboard.php');
+        log_activity((int)$u['id'], 'student_status_changed', 'user', $id, ['دانش‌آموز' => $student['full_name'], 'وضعیت' => 'تایید و فعال‌سازی']);
         $msg = $student['full_name'] . ' تأیید شد.';
         break;
     case 'suspend':
         db()->prepare('UPDATE users SET status="suspended" WHERE id=?')->execute([$id]);
+        log_activity((int)$u['id'], 'student_status_changed', 'user', $id, ['دانش‌آموز' => $student['full_name'], 'وضعیت' => 'مسدودسازی']);
         $msg = $student['full_name'] . ' مسدود شد.';
         break;
     case 'activate':
         db()->prepare('UPDATE users SET status="active" WHERE id=?')->execute([$id]);
+        log_activity((int)$u['id'], 'student_status_changed', 'user', $id, ['دانش‌آموز' => $student['full_name'], 'وضعیت' => 'فعال‌سازی']);
         $msg = $student['full_name'] . ' فعال شد.';
         break;
     case 'delete':
         db()->prepare('DELETE FROM users WHERE id=? AND role="student"')->execute([$id]);
+        log_activity((int)$u['id'], 'student_deleted', 'user', $id, ['دانش‌آموز حذف‌شده' => $student['full_name']]);
         $msg = 'دانش‌آموز حذف شد.';
         break;
     default:

@@ -113,8 +113,13 @@ function advisor_students(int $advisorId, ?string $status = null, string $q = ''
             (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id AND t.completion_status="full") AS full_tasks,
             (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id AND t.completion_status="partial") AS partial_tasks,
             (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id AND t.completion_status="missed") AS missed_tasks
-            FROM users u WHERE u.role="student" AND (u.advisor_id=? OR ? IN (SELECT id FROM users WHERE role="admin"))';
-    $params = [$advisorId, $advisorId];
+            FROM users u WHERE u.role="student" 
+            AND (
+                u.advisor_id=? 
+                OR ? IN (SELECT id FROM users WHERE role="admin" OR (role="advisor" AND access_mode="all"))
+                OR u.id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id=?)
+            )';
+    $params = [$advisorId, $advisorId, $advisorId];
     if ($status) { $sql .= ' AND u.status=?'; $params[] = $status; }
     if ($q !== '') { $sql .= ' AND (u.full_name LIKE ? OR u.username LIKE ?)'; $params[] = "%$q%"; $params[] = "%$q%"; }
     $sql .= ' ORDER BY FIELD(u.status,"pending","active","suspended"), u.created_at DESC';
@@ -423,8 +428,18 @@ function exam_sections(int $examId): array {
     $st->execute([$examId]);
     return $st->fetchAll();
 }
+function ensure_question_number_column(): void {
+    static $done = null;
+    if ($done !== null) return;
+    try {
+        db()->exec("ALTER TABLE exam_questions ADD COLUMN question_number INT UNSIGNED NULL DEFAULT NULL AFTER section_id");
+        $done = true;
+    } catch (Throwable $e) { $done = true; }
+}
+
 function exam_questions(int $examId): array {
-    $st = db()->prepare('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY section_id, sort_order, id');
+    ensure_question_number_column();
+    $st = db()->prepare('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY section_id, COALESCE(question_number, sort_order), sort_order, id');
     $st->execute([$examId]);
     return $st->fetchAll();
 }
@@ -565,7 +580,8 @@ function attempt_report(int $attemptId): ?array {
             $sel = ($sel===null||$sel==='') ? null : (int)$sel;
             $st2 = $sel===null ? 'blank' : ((int)$sel===(int)$q['correct_opt'] ? 'correct' : 'wrong');
             $secStats[$sid][$st2]++;
-            $byList[] = ['q'=>$q,'gnum'=>$gnum,'sec'=>$sec['name'],'selected'=>$sel,'state'=>$st2];
+            $actualNum = $q['question_number'] !== null ? (int)$q['question_number'] : $gnum;
+            $byList[] = ['q'=>$q,'gnum'=>$actualNum,'sec'=>$sec['name'],'selected'=>$sel,'state'=>$st2];
         }
     }
     foreach ($secStats as &$s) {

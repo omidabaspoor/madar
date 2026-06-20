@@ -7,6 +7,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/models.php';
 require_once __DIR__ . '/../includes/reporting.php';
 require_once __DIR__ . '/../includes/review_scheduler.php';
+require_once __DIR__ . '/../includes/log.php';
 boot_session();
 require_login();
 require_csrf();
@@ -160,6 +161,7 @@ case 'create': {
         remember_task_choice($me, ['task_type'=>$type,'unit_index'=>$unit,'subject_id'=>$subj,
             'target_count'=>$target,'target_unit'=>$tunit,'duration_min'=>$dur,'priority'=>$prio,'source'=>$source]);
     }
+    log_activity($me, 'plan_updated', 'task', $id, ['عملیات' => 'افزودن تسک', 'عنوان' => $title, 'دانش‌آموز' => db()->query("SELECT full_name FROM users WHERE id=$studentId")->fetchColumn()]);
     json_out(['ok'=>true,'task'=>render_task(task_row($id))]);
 }
 
@@ -191,6 +193,7 @@ case 'update': {
         remember_task_choice($me, ['task_type'=>$type,'unit_index'=>(int)$t['unit_index'],'subject_id'=>$subj,
             'target_count'=>$target,'target_unit'=>$tunit,'duration_min'=>$dur,'priority'=>$prio,'source'=>$source]);
     }
+    log_activity($me, 'plan_updated', 'task', $id, ['عملیات' => 'ویرایش مشخصات تسک', 'عنوان' => $title]);
     json_out(['ok'=>true,'task'=>render_task(task_row($id))]);
 }
 
@@ -200,6 +203,7 @@ case 'delete': {
     $id = (int)($in['id'] ?? 0); $t = task_row($id);
     if (!$t || !plan_owned_by_advisor((int)$t['plan_id'],$me,$role)) json_out(['ok'=>false,'error'=>'تسک یافت نشد'],404);
     db()->prepare('DELETE FROM tasks WHERE id=?')->execute([$id]);
+    log_activity($me, 'plan_updated', 'task', $id, ['عملیات' => 'حذف تسک درسی', 'عنوان' => $t['title']]);
     json_out(['ok'=>true]);
 }
 
@@ -236,6 +240,11 @@ case 'publish': {
     $planId=(int)($in['plan_id']??0); $status = ($in['status']??'published')==='draft'?'draft':'published';
     if (!plan_owned_by_advisor($planId,$me,$role)) json_out(['ok'=>false,'error'=>'برنامه نامعتبر'],403);
     db()->prepare('UPDATE plans SET status=? WHERE id=?')->execute([$status,$planId]);
+    $pInfo = db()->query("SELECT title, student_id FROM plans WHERE id=$planId")->fetch();
+    $stName = db()->query("SELECT full_name FROM users WHERE id=" . (int)$pInfo['student_id'])->fetchColumn();
+    log_activity($me, $status === 'published' ? 'plan_published' : 'plan_updated', 'plan', $planId, [
+        'عنوان برنامه' => $pInfo['title'], 'دانش‌آموز' => $stName, 'وضعیت' => $status === 'published' ? 'انتشار رسمی' : 'پیش‌نویس'
+    ]);
     if ($status==='published') {
         $st=db()->prepare('SELECT student_id FROM plans WHERE id=?'); $st->execute([$planId]); $sid=(int)$st->fetchColumn();
         notify($sid,'برنامه‌ی جدید شما آماده شد 📅','مشاور برنامه‌ی این هفته را منتشر کرد.','calendar','student/plan.php');
@@ -372,6 +381,15 @@ case 'set_status': {
     $up->execute([$status,$isDone,$doneCount,$coursePercent,$feeling ?: null,$note ?: null,$completedAt,$now,$id]);
 
     if (in_array($status, ['full','partial'], true)) { review_create_for_task($id); }
+    
+    $statusPersian = match($status) {
+        'full'    => 'کامل انجام شد ✅',
+        'partial' => 'ناقص (تا حدودی) ●',
+        'missed'  => 'انجام نشد (از دست رفت) ✕',
+        default   => 'در انتظار انجام …'
+    };
+    log_activity($me, 'task_status_updated', 'task', $id, ['عنوان' => $t['title'], 'وضعیت تسک' => $statusPersian, 'درصد کورس' => $coursePercent !== null ? "$coursePercent٪" : '-']);
+
     if ($status === 'full') {
         touch_streak($me);
         notify((int)$t['advisor_id'],'تسک کامل انجام شد ✅', ($u['full_name'].' «'.$t['title'].'» را کامل انجام داد.'),'check','admin/reports.php?student='.$me);

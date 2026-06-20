@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/layout.php';
+require_once __DIR__ . '/../includes/log.php';
 boot_session();
 
 if (is_logged_in()) {
@@ -32,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($u && password_verify($password, $u['password_hash'])) {
                 if ($u['status'] === 'suspended') {
                     $err = 'حساب شما مسدود شده است. با مشاور خود تماس بگیرید.';
+                    log_activity((int)$u['id'], 'login_failed', 'user', (int)$u['id'], ['علت' => 'حساب کاربری مسدود است']);
                 } else {
                     $_SESSION['login_attempts'] = 0;
                     // به‌روزرسانی هش در صورت نیاز
@@ -40,11 +42,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $up->execute([password_hash($password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]), $u['id']]);
                     }
                     login_user($u, $remember);
+                    log_activity((int)$u['id'], 'user_login', 'user', (int)$u['id'], ['نقش' => $u['role'] === 'admin' ? 'مشاور ارشد' : ($u['role'] === 'advisor' ? 'مشاور تحصیلی' : 'دانش‌آموز')]);
                     if ($u['role'] === 'student' && $u['status'] === 'pending') redirect('auth/pending.php');
                     redirect($u['role'] === 'student' ? 'student/dashboard.php' : 'admin/dashboard.php');
                 }
             } else {
                 $_SESSION['login_attempts']++;
+                $failUid = $u ? (int)$u['id'] : 0;
+                log_activity($failUid, 'login_failed', 'user', $failUid, ['نام کاربری وارد شده' => $username, 'خطا' => 'رمز عبور یا نام کاربری نادرست']);
                 if ($_SESSION['login_attempts'] >= 5) {
                     $_SESSION['login_lock'] = time() + 30;
                     $_SESSION['login_attempts'] = 0;

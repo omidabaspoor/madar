@@ -1,6 +1,7 @@
 <?php
 /** به‌روزرسانی پروفایل و گذرواژه */
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/log.php';
 boot_session();
 require_login();
 require_csrf();
@@ -17,6 +18,7 @@ if ($action === 'profile') {
     if ($phone!=='' && !preg_match('/^09\d{9}$/',$phone)) { flash('error','شماره موبایل نامعتبر'); redirect($u['role']==='student'?'student/profile.php':'admin/settings.php'); }
     db()->prepare('UPDATE users SET full_name=?,phone=?,field=?,grade=? WHERE id=?')
         ->execute([$name,$phone ?: null,$field ?: null,$grade ?: null,$me]);
+    log_activity($me, 'profile_updated', 'user', $me, ['نام' => $name, 'شماره تماس' => $phone]);
     flash('success','پروفایل به‌روزرسانی شد ✅');
     redirect($u['role']==='student'?'student/profile.php':'admin/settings.php');
 }
@@ -29,6 +31,7 @@ if ($action === 'password') {
     if ($new !== $new2) { flash('error','تکرار گذرواژه مطابقت ندارد'); redirect($target); }
     db()->prepare('UPDATE users SET password_hash=? WHERE id=?')
         ->execute([password_hash($new, PASSWORD_BCRYPT, ['cost'=>BCRYPT_COST]), $me]);
+    log_activity($me, 'password_changed', 'user', $me);
     flash('success','گذرواژه تغییر کرد 🔒');
     redirect($target);
 }

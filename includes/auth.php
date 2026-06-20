@@ -126,6 +126,23 @@ function require_role(string ...$roles): void
     }
 }
 
+function is_chief_advisor(?array $user = null): bool
+{
+    $u = $user ?? current_user();
+    if (!$u) return false;
+    return ($u['role'] ?? '') === 'admin';
+}
+
+function require_chief_advisor(): void
+{
+    require_login();
+    if (!is_chief_advisor()) {
+        http_response_code(403);
+        require __DIR__ . '/../403.php';
+        exit;
+    }
+}
+
 /* ---------- اعلان ---------- */
 function notify(int $userId, string $title, string $body = '', string $type = 'info', string $link = ''): void
 {

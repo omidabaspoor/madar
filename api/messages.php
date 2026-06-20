@@ -2,6 +2,7 @@
 /** API پیام‌ها: contacts, list, send — متن + عکس/دوربین + فایل/PDF + ویس */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/models.php';
+require_once __DIR__ . '/../includes/log.php';
 boot_session();
 require_login();
 $u = current_user();
@@ -276,8 +277,13 @@ case 'send': {
         $preview = mb_substr($body,0,60);
     }
     if ($body !== '' && $media) $preview .= ' · ' . mb_substr($body,0,45);
+    
+    $recipName = db()->query("SELECT full_name FROM users WHERE id=$other")->fetchColumn() ?: 'کاربر';
+    $msgId = (int)db()->lastInsertId();
+    log_activity($me, 'message_sent', 'message', $msgId, ['گیرنده' => $recipName, 'محتوا' => $preview]);
+
     notify($other, 'پیام جدید 💬', $preview, 'message', $u['role']==='student'?'admin/messages.php?with='.$me:'student/messages.php');
-    json_out(['ok'=>true,'time'=>fa_num(date('H:i')),'id'=>(int)db()->lastInsertId()]);
+    json_out(['ok'=>true,'time'=>fa_num(date('H:i')),'id'=>$msgId]);
 }
 
 default: json_out(['ok'=>false,'error'=>'عملیات نامعتبر'],400);

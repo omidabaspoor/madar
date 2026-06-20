@@ -195,7 +195,7 @@ function review_create_for_task(int $taskId): int
     $baseDate = date('Y-m-d', strtotime($first));
     $profile = review_profile_for_task($t);
     
-    // هوشمندسازی سامورایی بر اساس حس و حال دانش‌آموز و جزئیات اجرا (Granular Task Feeling Awareness)
+    // هوشمندسازی پیشرفته بر اساس حس و حال دانش‌آموز و جزئیات اجرا (Granular Task Feeling Awareness)
     $feeling = (string)($t['student_feeling'] ?? '');
     if ($feeling === 'hard' || $feeling === 'bad' || $status === 'partial') {
         // مبحث چالش‌برانگیز یا ناقص بوده؛ نیازمند مرور نجات فوری در روز ۱، سپس فواصل فشرده‌تر

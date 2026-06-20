@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/models.php';
 require_once __DIR__ . '/../includes/panel_layout.php';
+require_once __DIR__ . '/../includes/log.php';
 boot_session();
 require_role('advisor','admin');
 $u = current_user();
@@ -12,14 +13,23 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     $act = (string)input('s_action');
     if ($act==='add_subject') {
         $name=trim((string)input('name')); $color=trim((string)input('color')) ?: '#6b8872';
-        if ($name!=='') { db()->prepare('INSERT INTO subjects (advisor_id,name,color) VALUES (?,?,?)')->execute([$u['id'],$name,$color]); flash('success','درس با موفقیت اضافه شد'); }
+        if ($name!=='') { 
+            db()->prepare('INSERT INTO subjects (advisor_id,name,color) VALUES (?,?,?)')->execute([$u['id'],$name,$color]); 
+            log_activity((int)$u['id'], 'settings_updated', 'system', null, ['عملیات' => 'افزودن درس تحصیلی', 'نام درس' => $name, 'رنگ' => $color]);
+            flash('success','درس با موفقیت اضافه شد'); 
+        }
     } elseif ($act==='del_subject') {
-        db()->prepare('DELETE FROM subjects WHERE id=?')->execute([(int)input('id')]); flash('success','درس حذف شد');
+        $delId = (int)input('id');
+        $subjName = db()->query("SELECT name FROM subjects WHERE id=$delId")->fetchColumn() ?: 'درس';
+        db()->prepare('DELETE FROM subjects WHERE id=?')->execute([$delId]); 
+        log_activity((int)$u['id'], 'settings_updated', 'system', null, ['عملیات' => 'حذف درس تحصیلی', 'نام درس' => $subjName]);
+        flash('success','درس حذف شد');
     } elseif ($act==='planner_defaults') {
         if (!settings_table_ready()) {
             flash('error','جدول تنظیمات ساخته نشد. لطفاً دسترسی CREATE TABLE دیتابیس را بررسی کنید.');
         } else {
             save_planner_settings((int)$u['id'], $_POST);
+            log_activity((int)$u['id'], 'settings_updated', 'system', null, ['عملیات' => 'ذخیره تنظیمات کلان برنامه‌ریز', 'مدت پیش‌فرض' => $_POST['default_duration'] ?? '60']);
             $saved = advisor_settings((int)$u['id']);
             flash('success','تنظیمات کلان مَدار با موفقیت ذخیره و به‌روزرسانی شد 🚀');
         }

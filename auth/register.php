@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/layout.php';
+require_once __DIR__ . '/../includes/log.php';
 boot_session();
 
 if (is_logged_in()) {
@@ -41,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newId = (int)db()->lastInsertId();
             // اعلان به مشاور
             if ($adv) notify((int)$adv, 'درخواست عضویت جدید', $old['full_name'] . ' منتظر تأیید شماست.', 'user', 'admin/students.php');
+            log_activity($newId, 'student_registered', 'user', $newId, ['نام' => $old['full_name'], 'رشته' => $old['field'], 'پایه' => $old['grade']]);
             // لاگین و هدایت به صفحه انتظار
             $u = ['id'=>$newId,'role'=>'student','status'=>'pending'];
             login_user($u);

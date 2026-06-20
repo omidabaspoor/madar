@@ -216,25 +216,74 @@ panel_start($exam ? 'ویرایش آزمون' : 'طراحی آزمون جدید'
               <input class="input" id="quickKeyInput" value="<?= e($exam['answer_key'] ?? '') ?>" placeholder="مثلاً 4123421142341..." style="font-family:monospace;direction:ltr;font-size:1.1rem;letter-spacing:2px;font-weight:bold">
             </div>
 
+            <!-- نوار کنترل حرفه‌ای شماره سوالات -->
+            <div class="advanced-numbering-controls mb-4 p-4" style="background: var(--surface-2); border: 1px solid var(--gold); border-radius: 16px;">
+              <b style="color: var(--gold-light); font-size: 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                <?= icon('settings', 18) ?> کنترل حرفه‌ای شماره سوالات (Custom Question Numbering)
+              </b>
+              <div class="grid cols-1 sm:cols-2 gap-3 items-end" style="grid-template-columns: 1fr 1fr;">
+                <div>
+                  <label style="font-size: 13px; color: var(--text-2); display: block; margin-bottom: 6px;">شروع شماره سوالات از عدد:</label>
+                  <div class="input-group flex gap-2">
+                    <input type="number" id="startQNumInput" value="1" min="1" class="input font-mono dir-ltr text-center" style="height: 42px;">
+                    <button type="button" onclick="applyStartNumbering()" class="btn btn-gold btn-sm px-4 whitespace-nowrap font-bold" style="height: 42px;">✓ اعمال شماره‌گذاری</button>
+                  </div>
+                </div>
+                <div>
+                  <label style="font-size: 13px; color: var(--text-2); display: block; margin-bottom: 6px;">افزودن سوال با شماره دلخواه:</label>
+                  <div class="input-group flex gap-2">
+                    <input type="number" id="specificQNumInput" placeholder="مثلاً 155" min="1" class="input font-mono dir-ltr text-center" style="height: 42px;">
+                    <button type="button" onclick="addSpecificCustomBubble()" class="btn btn-sage btn-sm px-4 whitespace-nowrap font-bold" style="height: 42px;">+ افزودن حباب</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- پاسخ‌برگ حبابی تعاملی مشاور -->
-            <div class="bubble-grid-studio" style="max-height:380px;overflow-y:auto;background:var(--surface-2);border:1px solid var(--border-soft);padding:16px;border-radius:var(--r-lg);display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:12px;direction:ltr">
+            <div class="bubble-grid-studio" id="bubbleGridStudio" style="max-height:380px;overflow-y:auto;background:var(--surface-2);border:1px solid var(--border-soft);padding:16px;border-radius:var(--r-lg);display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:12px;direction:ltr">
               <?php 
                 $existingKey = trim((string)($exam['answer_key'] ?? ''));
                 $currCount = max(30, mb_strlen($existingKey));
-                for($qi=1; $qi<=$currCount; $qi++): 
-                  $cVal = isset($existingKey[$qi-1]) ? (int)$existingKey[$qi-1] : 0;
+                $useQuestions = !empty($questions);
+                if ($useQuestions):
+                  foreach ($questions as $qi => $q):
+                    $realNum = $q['question_number'] !== null ? (int)$q['question_number'] : ($qi + 1);
+                    $cVal    = (int)$q['correct_opt'];
               ?>
-                <div class="bg-item" data-qnum="<?= $qi ?>" style="background:var(--surface-1);padding:8px;border-radius:8px;display:flex;flex-direction:column;align-items:center;border:1px solid var(--border-soft)">
-                  <span style="font-size:.75rem;color:var(--text-3);font-weight:bold;margin-bottom:4px">Q<?= $qi ?></span>
-                  <div class="flex gap-1">
-                    <?php for($oi=1; $oi<=4; $oi++): ?>
-                      <button type="button" class="bubble-btn <?= $cVal===$oi?'active':'' ?>" data-opt="<?= $oi ?>" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:<?= $cVal===$oi?'var(--gold)':'var(--surface-2)' ?>;color:<?= $cVal===$oi?'#000':'var(--text-2)' ?>;font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">
-                        <?= $oi ?>
-                      </button>
-                    <?php endfor; ?>
-                  </div>
-                </div>
-              <?php endfor; ?>
+                    <div class="bg-item" data-qnum="<?= $qi + 1 ?>" data-realnum="<?= $realNum ?>" style="background:var(--surface-1);padding:10px;border-radius:12px;display:flex;flex-direction:column;align-items:center;border:1px solid var(--border-soft)">
+                      <div class="flex items-center gap-1 mb-2 w-full justify-center">
+                        <span style="font-size:.7۵rem;color:var(--text-3);font-weight:bold;">Q</span>
+                        <input type="number" class="input bubble-qnum-input font-mono font-bold text-center text-xs p-1 h-7 w-16" value="<?= $realNum ?>" title="تنظیم دستی شماره این سوال" onchange="updateBubbleRealNum(this)">
+                      </div>
+                      <div class="flex gap-1">
+                        <?php for($oi=1; $oi<=4; $oi++): ?>
+                          <button type="button" class="bubble-btn <?= $cVal===$oi?'active':'' ?>" data-opt="<?= $oi ?>" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:<?= $cVal===$oi?'var(--gold)':'var(--surface-2)' ?>;color:<?= $cVal===$oi?'#000':'var(--text-2)' ?>;font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">
+                            <?= $oi ?>
+                          </button>
+                        <?php endfor; ?>
+                      </div>
+                    </div>
+                  <?php endforeach; ?>
+                <?php else:
+                  for($qi=1; $qi<=$currCount; $qi++): 
+                    $cVal = isset($existingKey[$qi-1]) ? (int)$existingKey[$qi-1] : 0;
+                    $realNum = $qi;
+                ?>
+                    <div class="bg-item" data-qnum="<?= $qi ?>" data-realnum="<?= $realNum ?>" style="background:var(--surface-1);padding:10px;border-radius:12px;display:flex;flex-direction:column;align-items:center;border:1px solid var(--border-soft)">
+                      <div class="flex items-center gap-1 mb-2 w-full justify-center">
+                        <span style="font-size:.7۵rem;color:var(--text-3);font-weight:bold;">Q</span>
+                        <input type="number" class="input bubble-qnum-input font-mono font-bold text-center text-xs p-1 h-7 w-16" value="<?= $realNum ?>" title="تنظیم دستی شماره این سوال" onchange="updateBubbleRealNum(this)">
+                      </div>
+                      <div class="flex gap-1">
+                        <?php for($oi=1; $oi<=4; $oi++): ?>
+                          <button type="button" class="bubble-btn <?= $cVal===$oi?'active':'' ?>" data-opt="<?= $oi ?>" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:<?= $cVal===$oi?'var(--gold)':'var(--surface-2)' ?>;color:<?= $cVal===$oi?'#000':'var(--text-2)' ?>;font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">
+                            <?= $oi ?>
+                          </button>
+                        <?php endfor; ?>
+                      </div>
+                    </div>
+                  <?php endfor; ?>
+                <?php endif; ?>
             </div>
           </div>
 

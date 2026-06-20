@@ -22,9 +22,9 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
     page_head($title, '', array_merge(['panel.css'], $extraCss));
 
     $items = $role === 'admin' ? [
-        'main' => [
+        'main' => array_filter([
             ['dashboard','داشبورد','home','admin/dashboard.php'],
-            ['advisors','مشاوران','users','admin/advisors.php'],
+            is_chief_advisor() ? ['advisors','مشاوران','users','admin/advisors.php'] : null,
             ['students','دانش‌آموزان','users','admin/students.php'],
             ['plans','برنامه‌ها','calendar','admin/plans.php'],
             ['exams','آزمون‌ها','clipboard','admin/exams.php'],
@@ -32,8 +32,8 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
             ['student_reports','گزارش حرفه‌ای','edit','admin/student_reports.php'],
             ['reviews','مرورها','repeat','admin/reviews.php'],
             ['messages','پیام‌ها','message','admin/messages.php'],
-            ['logs','لاگ فعالیت','list','admin/logs.php'],
-        ],
+            is_chief_advisor() ? ['logs','لاگ فعالیت','list','admin/logs.php'] : null,
+        ]),
         'other' => [
             ['achievements','دستاوردها','trophy','admin/achievements.php'],
             ['settings','تنظیمات','settings','admin/settings.php'],

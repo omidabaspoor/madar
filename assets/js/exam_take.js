@@ -1,5 +1,5 @@
 /* =================================================================
-   مَدار Exam-Taking Engine — Samurai Dual-Panel & Onboarding Tour
+   مَدار Exam-Taking Engine — Smart Dual-Panel & Onboarding Tour
    ================================================================= */
 (() => {
   'use strict';
@@ -382,7 +382,8 @@
     }
   });
 
-  document.getElementById('finishSamuraiExamBtn')?.addEventListener('click', () => {
+  const smartBtn = document.getElementById('finishSamuraiExamBtn') || document.getElementById('finishSmartExamBtn');
+  smartBtn?.addEventListener('click', () => {
     openSubmit();
   });
 

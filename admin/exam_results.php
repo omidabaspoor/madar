@@ -18,11 +18,19 @@ if ($viewAttempt) {
     if (!$rep || (int)$rep['attempt']['exam_id'] !== $examId) { flash('error','کارنامه یافت نشد'); redirect('admin/exam_results.php?id='.$examId); }
     panel_start('کارنامه تحلیلی دانش‌آموز', $rep['attempt']['full_name'].' · '.$exam['title'], 'admin', 'exams', ['student.css','exam.css','result.css']);
     ?>
-    <div class="between wrap gap-3 mb-4" style="align-items:center">
-      <a href="<?= url('admin/exam_results.php?id='.$examId) ?>" class="btn btn-ghost btn-sm flex gap-1" style="align-items:center"><?= icon('arrow-right',16) ?> بازگشت به لیست نتایج</a>
-      <button type="button" class="btn btn-gold btn-sm flex gap-1 reset-attempt-btn" data-att="<?= (int)$viewAttempt ?>" data-exam="<?= (int)$examId ?>" style="align-items:center;font-weight:900">
-        🔄 صدور مجوز شرکت مجدد دانش‌آموز در این آزمون (حذف نمره‌ی فعلی)
-      </button>
+    <div class="between wrap gap-3 mb-6" style="background:var(--surface-1); padding:16px 24px; border-radius:var(--r-md); border:1px solid var(--border);">
+      <a href="<?= url('admin/exam_results.php?id='.$examId) ?>" class="btn btn-ghost btn-sm flex gap-1 font-bold" style="align-items:center"><?= icon('arrow-right',16) ?> بازگشت به لیست نتایج</a>
+      <div class="flex items-center gap-2.5 wrap">
+        <a href="<?= url('student/exam_pdf.php?id=' . $examId) ?>" target="_blank" class="btn btn-ghost btn-sm flex items-center gap-1.5" style="border-color:var(--sage); color:var(--sage-light); font-weight:bold;">
+          <?= icon('clipboard', 16) ?> <span>PDF دفترچه سوالات</span>
+        </a>
+        <a href="<?= url('student/exam_solution_pdf.php?attempt=' . $viewAttempt) ?>" target="_blank" class="btn btn-sage btn-sm flex items-center gap-1.5" style="font-weight:bold;">
+          <?= icon('star', 16) ?> <span>PDF کارنامه و پاسخنامه</span>
+        </a>
+        <button type="button" class="btn btn-gold btn-sm flex gap-1 reset-attempt-btn" data-att="<?= (int)$viewAttempt ?>" data-exam="<?= (int)$examId ?>" style="align-items:center;font-weight:900 shadow-md">
+          🔄 صدور مجوز شرکت مجدد (حذف کارنامه فعلی)
+        </button>
+      </div>
     </div>
     <?php
     render_result($rep, true);

@@ -1,5 +1,5 @@
 /* =================================================================
-   مَدار Exam Builder — Samurai Multi-Mode Studio
+   مَدار Exam Builder — Smart Multi-Mode Studio
    ================================================================= */
 (() => {
   'use strict';
@@ -298,9 +298,20 @@
   });
 
   document.getElementById('saveQuickSheetSuiteBtn')?.addEventListener('click', async function() {
+    const customKeys = [];
+    document.querySelectorAll('.bubble-grid-studio .bg-item').forEach(item => {
+        const qnum = parseInt(item.querySelector('.bubble-qnum-input')?.value) || parseInt(item.dataset.realnum) || parseInt(item.dataset.qnum) || 0;
+        const activeBtn = item.querySelector('.bubble-btn[style*="var(--gold)"]');
+        const optVal = activeBtn ? parseInt(activeBtn.dataset.opt) : 0;
+        if (qnum && optVal) {
+            customKeys.push({ question_number: qnum, correct_opt: optVal });
+        }
+    });
+
     const rawKey = quickKeyInput ? quickKeyInput.value : '';
     const answerKey = rawKey.replace(/[۱١]/g,'1').replace(/[۲٢]/g,'2').replace(/[۳٣]/g,'3').replace(/[۴٤]/g,'4').replace(/[^1-4]/g, '');
-    if (!answerKey) { toast('لطفاً پاسخنامه کلیدی را وارد کنید یا روی حباب‌ها کلیک کنید', 'error'); return; }
+
+    if (!answerKey && customKeys.length === 0) { toast('لطفاً پاسخنامه کلیدی را وارد کنید یا روی حباب‌ها کلیک کنید', 'error'); return; }
     if (!examId) {
       const ok = await saveMeta();
       if (!ok || !examId) { toast('ابتدا عنوان آزمون را وارد کن', 'error'); return; }
@@ -311,14 +322,89 @@
     const sheetPath = thumbsGrid?.querySelector('.sheet-thumb-item')?.dataset.spath || '';
 
     try {
-      const d = await api(API, { method: 'POST', body: { action: 'quick_sheet_generate', exam_id: examId, sheet_path: sheetPath, answer_key: answerKey } });
-      toast(`آزمون تصویرمحور با موفقیت ساخته شد (${faNum(d.q_count)} سوال) 🎉`, 'success');
+      const d = await api(API, { method: 'POST', body: { action: 'quick_sheet_generate', exam_id: examId, sheet_path: sheetPath, answer_key: answerKey, custom_keys: customKeys } });
+      toast(`آزمون با موفقیت ساخته و شماره‌گذاری شد (${faNum(d.q_count)} سوال) 🎉`, 'success');
       setTimeout(() => { location.href = `${location.pathname}?id=${examId}&step=2&mode=quick_sheet`; }, 650);
     } catch(err) {
       toast(err.error || 'خطا در ثبت نهایی آزمون', 'error');
       this.disabled = false; this.innerHTML = oldHtml || '✓ ثبت نهایی و ساخت سوالات';
     }
   });
+
+  window.applyStartNumbering = function() {
+      const startX = parseInt(document.getElementById('startQNumInput')?.value) || 1;
+      let curr = startX;
+      document.querySelectorAll('.bubble-grid-studio .bg-item').forEach(item => {
+          item.dataset.realnum = curr;
+          const inp = item.querySelector('.bubble-qnum-input');
+          if (inp) inp.value = curr;
+          curr++;
+      });
+      toast(`شماره‌گذاری حباب‌ها از عدد ${faNum(startX)} اعمال شد`, 'success');
+  };
+
+  window.addSpecificCustomBubble = function() {
+      const spInp = document.getElementById('specificQNumInput');
+      const realNum = parseInt(spInp?.value) || 0;
+      if (!realNum) { toast('شماره دقیق سوال را وارد کنید', 'error'); return; }
+      
+      const studio = document.getElementById('bubbleGridStudio');
+      if (!studio) return;
+      
+      const html = `
+        <div class="bg-item" data-qnum="999" data-realnum="${realNum}" style="background:var(--surface-1);padding:10px;border-radius:12px;display:flex;flex-direction:column;align-items:center;border:1px solid var(--gold)">
+          <div class="flex items-center gap-1 mb-2 w-full justify-center">
+            <span style="font-size:.7۵rem;color:var(--text-3);font-weight:bold;">Q</span>
+            <input type="number" class="input bubble-qnum-input font-mono font-bold text-center text-xs p-1 h-7 w-16" value="${realNum}" title="تنظیم دستی شماره این سوال" onchange="updateBubbleRealNum(this)">
+          </div>
+          <div class="flex gap-1">
+            ${[1,2,3,4].map(oi => `
+              <button type="button" class="bubble-btn" data-opt="${oi}" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">
+                ${oi}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      studio.insertAdjacentHTML('beforeend', html);
+      studio.scrollTop = studio.scrollHeight;
+      spInp.value = '';
+      toast(`سوال جدید با شماره اختصاصی ${faNum(realNum)} افزوده شد`, 'success');
+  };
+
+  window.updateBubbleRealNum = function(inp) {
+      const item = inp.closest('.bg-item');
+      if (item) item.dataset.realnum = inp.value;
+  };
+
+  window.renumberSectionQuestions = function(sectionId) {
+      const answer = prompt('شماره سوالات این سرفصل/درس از چه عددی شروع شود؟', '101');
+      const startX = parseInt(answer);
+      if (!startX) return;
+
+      const secEl = document.querySelector(`.exam-section[data-section="${sectionId}"]`);
+      if (!secEl) return;
+
+      let curr = startX;
+      secEl.querySelectorAll('.q-card').forEach(card => {
+          const inp = card.querySelector('[data-q-number]');
+          if (inp) inp.value = curr;
+          const qid = parseInt(card.dataset.question);
+          if (qid) dirty.add(qid);
+          curr++;
+      });
+
+      autosave();
+      toast(`شماره‌گذاری بخش از عدد ${faNum(startX)} با موفقیت انجام شد`, 'success');
+  };
+
+  window.triggerQuestionAutosave = function(inp) {
+      const card = inp.closest('.q-card');
+      if (card) {
+          const qid = parseInt(card.dataset.question);
+          if (qid) dirty.add(qid);
+      }
+  };
 
   /* =================================================================
      STANDARD STUDIO: traditional DOM question cards

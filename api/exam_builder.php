@@ -174,8 +174,10 @@ case 'save_question': {
     $o3 = trim((string)($in['opt3'] ?? '')); $o4 = trim((string)($in['opt4'] ?? ''));
     $cor = max(1,min(4,(int)($in['correct_opt'] ?? 1)));
     $exp = trim((string)($in['explanation'] ?? '')) ?: null;
-    db()->prepare('UPDATE exam_questions SET q_text=?,opt1=?,opt2=?,opt3=?,opt4=?,correct_opt=?,explanation=? WHERE id=?')
-        ->execute([$txt ?: null,$o1 ?: null,$o2 ?: null,$o3 ?: null,$o4 ?: null,$cor,$exp,$id]);
+    $qnum = isset($in['question_number']) && $in['question_number'] !== '' ? (int)$in['question_number'] : null;
+    try { db()->exec("ALTER TABLE exam_questions ADD COLUMN question_number INT UNSIGNED NULL DEFAULT NULL AFTER section_id"); } catch (Throwable $altE) {}
+    db()->prepare('UPDATE exam_questions SET q_text=?,opt1=?,opt2=?,opt3=?,opt4=?,correct_opt=?,explanation=?,question_number=? WHERE id=?')
+        ->execute([$txt ?: null,$o1 ?: null,$o2 ?: null,$o3 ?: null,$o4 ?: null,$cor,$exp,$qnum,$id]);
     json_out(['ok'=>true]);
 }
 
@@ -185,13 +187,15 @@ case 'autosave': {
     if (!own_exam($examId,$me,$u['role'])) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'],404);
     $questions = $in['questions'] ?? [];
     if (!is_array($questions)) $questions = [];
-    $upd = db()->prepare('UPDATE exam_questions SET q_text=?,opt1=?,opt2=?,opt3=?,opt4=?,correct_opt=?,explanation=? WHERE id=? AND exam_id=?');
+    try { db()->exec("ALTER TABLE exam_questions ADD COLUMN question_number INT UNSIGNED NULL DEFAULT NULL AFTER section_id"); } catch (Throwable $altE) {}
+    $upd = db()->prepare('UPDATE exam_questions SET q_text=?,opt1=?,opt2=?,opt3=?,opt4=?,correct_opt=?,explanation=?,question_number=? WHERE id=? AND exam_id=?');
     $saved = 0;
     db()->beginTransaction();
     try {
         foreach ($questions as $q) {
             $qid = (int)($q['id'] ?? 0); if (!$qid) continue;
             $cor = max(1,min(4,(int)($q['correct_opt'] ?? 1)));
+            $qnum = isset($q['question_number']) && $q['question_number'] !== '' ? (int)$q['question_number'] : null;
             $upd->execute([
                 trim((string)($q['q_text'] ?? '')) ?: null,
                 trim((string)($q['opt1'] ?? '')) ?: null,
@@ -200,6 +204,7 @@ case 'autosave': {
                 trim((string)($q['opt4'] ?? '')) ?: null,
                 $cor,
                 trim((string)($q['explanation'] ?? '')) ?: null,
+                $qnum,
                 $qid, $examId,
             ]);
             $saved++;
@@ -416,6 +421,8 @@ case 'quick_sheet_generate': {
 
     db()->beginTransaction();
     try {
+        try { db()->exec("ALTER TABLE exam_questions ADD COLUMN question_number INT UNSIGNED NULL DEFAULT NULL AFTER section_id"); } catch (Throwable $alterE) {}
+        
         $answerKeyToStore = $cleanKey;
         db()->prepare('UPDATE exams SET creation_mode="quick_sheet", answer_key=? WHERE id=?')->execute([$answerKeyToStore, $examId]);
         if ($sheetPath && !$e['sheet_path']) {
@@ -428,10 +435,24 @@ case 'quick_sheet_generate': {
         $secId = (int)db()->lastInsertId();
         
         $questionImage = sheet_asset_type($sheetPath) === 'image' ? $sheetPath : null;
-        $ins = db()->prepare('INSERT INTO exam_questions (exam_id, section_id, q_text, q_image, correct_opt, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
-        for ($i = 0; $i < $qCount; $i++) {
-            $cor = (int)$cleanKey[$i];
-            $ins->execute([$examId, $secId, 'سوال ' . fa_num($i + 1), $questionImage, $cor, $i + 1]);
+        $customKeys = $in['custom_keys'] ?? [];
+        if (!is_array($customKeys)) $customKeys = [];
+
+        $ins = db()->prepare('INSERT INTO exam_questions (exam_id, section_id, q_text, q_image, correct_opt, sort_order, question_number) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        
+        if (!empty($customKeys)) {
+            $so = 1;
+            foreach ($customKeys as $ck) {
+                $qnum = (int)($ck['question_number'] ?? $so);
+                $cor  = (int)($ck['correct_opt'] ?? 1);
+                $ins->execute([$examId, $secId, 'سوال ' . fa_num($qnum), $questionImage, $cor, $so++, $qnum]);
+            }
+            $qCount = count($customKeys);
+        } else {
+            for ($i = 0; $i < $qCount; $i++) {
+                $cor = (int)$cleanKey[$i];
+                $ins->execute([$examId, $secId, 'سوال ' . fa_num($i + 1), $questionImage, $cor, $i + 1, $i + 1]);
+            }
         }
         db()->commit();
     } catch (Throwable $ex) {

@@ -37,13 +37,30 @@ panel_start('گزارش حرفه‌ای', $student['full_name'].' · '.report_ty
   </div>
 </div>
 
+<div class="between wrap gap-3 mb-6" style="background:var(--surface-1); padding:16px 24px; border-radius:var(--r-md); border:1px solid var(--border);">
+  <div class="flex items-center gap-3">
+    <?= icon('chart', 20, 'text-gold') ?>
+    <b style="font-size: 1.05rem; color: var(--text);">خروجی‌های چاپی و مدیریتی این پرونده:</b>
+  </div>
+  <div class="flex items-center gap-3 wrap">
+    <a href="<?= url('admin/student_report_pdf.php?student=' . $studentId . '&type=' . $type) ?>" target="_blank" class="btn btn-gold flex items-center gap-2 shadow-lg" style="font-weight: 900;">
+      <?= icon('pie', 18) ?> <span>دریافت PDF گزارش پیشرفته و تحلیل مَدار</span>
+    </a>
+  </div>
+</div>
+
 <?php if(!$reports): ?>
 <div class="panel"><div class="empty-state"><div class="es-ico"><?= icon('chart',30) ?></div>هنوز گزارشی برای این بخش ثبت نشده</div></div>
 <?php else: foreach($reports as $r): $s=$r['snapshot']; $a=$r['advanced']; $an=$showInsight?report_build_analysis($studentId,(string)$r['report_type'],(string)$r['period_start'],(string)$r['period_end'],$s,$a):null; ?>
 <div class="panel report-admin-card mb-4 <?= $r['status']==='submitted'?'submitted':'draft' ?>">
-  <div class="panel-head">
-    <h3><?= e(report_type_label($r['report_type'])) ?> · <?= jalali_date($r['period_start']) ?><?= $r['period_start']!==$r['period_end']?' تا '.jalali_date($r['period_end']):'' ?></h3>
-    <span class="badge <?= $r['status']==='submitted'?'badge-sage':'badge-gold' ?>"><?= $r['status']==='submitted'?'ارسال شده':'تکمیل نشده' ?></span>
+  <div class="panel-head between wrap gap-2">
+    <div class="flex items-center gap-3">
+      <h3><?= e(report_type_label($r['report_type'])) ?> · <?= jalali_date($r['period_start']) ?><?= $r['period_start']!==$r['period_end']?' تا '.jalali_date($r['period_end']):'' ?></h3>
+      <span class="badge <?= $r['status']==='submitted'?'badge-sage':'badge-gold' ?>"><?= $r['status']==='submitted'?'ارسال شده':'تکمیل نشده' ?></span>
+    </div>
+    <a href="<?= url('admin/student_report_pdf.php?report_id=' . $r['id']) ?>" target="_blank" class="btn btn-ghost btn-sm flex items-center gap-1.5" style="border-color:var(--gold); color:var(--gold-light); font-weight:800;">
+      <?= icon('pie', 16) ?> <span>خروجی PDF این گزارش</span>
+    </a>
   </div>
   <div class="stat-cards compact-stats">
     <div class="panel stat"><span class="icon-tile sage">٪</span><div><div class="v"><?= fa_num($s['progress_percent']??0) ?>٪</div><div class="k">پیشرفت</div></div></div>
