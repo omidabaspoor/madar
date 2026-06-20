@@ -419,8 +419,8 @@ function subject_test_default(string $name): int {
     $n = trim($name);
     // زیست‌شناسی → ۴۰ تست
     if (strpos($n, 'زیست') !== false) return 40;
-    // ریاضی/حسابان/هندسه/گسسته → ۳۵ تست
-    foreach (['ریاضی','حسابان','هندسه','گسسته'] as $k) if (strpos($n, $k) !== false) return 35;
+    // ریاضی/حسابان/هندسه/گسسته/ریاضی جامع → ۳۵ تست
+    foreach (['ریاضی جامع','ریاضی','حسابان','هندسه','گسسته'] as $k) if (strpos($n, $k) !== false) return 35;
     // شیمی و فیزیک → ۳۰ تست
     foreach (['شیمی','فیزیک'] as $k) if (strpos($n, $k) !== false) return 30;
     // عمومی‌ها → ۲۰ تست

@@ -24,6 +24,7 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
     $items = $role === 'admin' ? [
         'main' => [
             ['dashboard','داشبورد','home','admin/dashboard.php'],
+            ['advisors','مشاوران','users','admin/advisors.php'],
             ['students','دانش‌آموزان','users','admin/students.php'],
             ['plans','برنامه‌ها','calendar','admin/plans.php'],
             ['exams','آزمون‌ها','clipboard','admin/exams.php'],
@@ -31,6 +32,7 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
             ['student_reports','گزارش حرفه‌ای','edit','admin/student_reports.php'],
             ['reviews','مرورها','repeat','admin/reviews.php'],
             ['messages','پیام‌ها','message','admin/messages.php'],
+            ['logs','لاگ فعالیت','list','admin/logs.php'],
         ],
         'other' => [
             ['achievements','دستاوردها','trophy','admin/achievements.php'],

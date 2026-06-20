@@ -596,6 +596,7 @@ function normalize_subject_for_chapters(string $name): ?string {
     if (mb_strpos($n, 'شیمی') !== false) return 'شیمی';
     if (mb_strpos($n, 'گسسته') !== false) return 'ریاضیات گسسته';
     if (mb_strpos($n, 'هندسه') !== false) return 'هندسه';
+    if (mb_strpos($n, 'ریاضی جامع') !== false) return 'ریاضی جامع';
     if (mb_strpos($n, 'ریاضی') === 0 || mb_strpos($n, 'ریاضی') !== false) return 'ریاضی';
     if (mb_strpos($n, 'حسابان') !== false) return 'حسابان';
     if (mb_strpos($n, 'عربی') !== false) return 'عربی، زبان قرآن';
@@ -627,7 +628,8 @@ function student_grade_number(string $grade): int {
 /** آیا درس از عمومی‌هاست و باید مستقل از رشته دانش‌آموز از field=omumi خوانده شود؟ */
 function is_common_chapter_subject(string $subjectKey): bool {
     return in_array($subjectKey, [
-        'عربی، زبان قرآن', 'دین و زندگی', 'فارسی', 'زبان انگلیسی', 'هویت اجتماعی', 'سلامت و بهداشت'
+        'عربی، زبان قرآن', 'دین و زندگی', 'فارسی', 'زبان انگلیسی', 'هویت اجتماعی', 'سلامت و بهداشت',
+        'ریاضی جامع'
     ], true);
 }
 
