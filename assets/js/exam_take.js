@@ -410,110 +410,95 @@
   });
 
   /* =================================================================
-     INTELLIGENT TYPEWRITER ONBOARDING TOUR
+     CLEAN DESKTOP/MOBILE ONBOARDING TOUR
      ================================================================= */
   const tourOverlay = document.getElementById('examOnboardingTourOverlay');
   const skipTourBtn = document.getElementById('skipTourBtn');
   const prevTourBtn = document.getElementById('prevTourStepBtn');
   const nextTourBtn = document.getElementById('nextTourStepBtn');
+  const replayTourBtn = document.getElementById('replayExamTour');
   const tourTitle   = document.getElementById('tourTitle');
   const tourText    = document.getElementById('tourText');
   const tourIco     = document.getElementById('tourIco');
-  const tourDots    = document.querySelectorAll('.tour-dot');
+  const tourDotsBox = document.getElementById('tourDots') || document.querySelector('.tour-dots');
+  const isSamurai = !!document.querySelector('.exam-samurai-layout');
+  const isPhone = () => window.matchMedia('(max-width: 760px)').matches;
 
-  const tourSteps = [
-    {
-      title: "۱. دفترچه‌ی سوالات کنکور",
-      ico: '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/></svg>',
-      text: "پنجره‌ی سمت راست دفترچه سوالات کنکور شماست. می‌توانی با موس/انگشت برگه را بکشی تا جابه‌جا شود، یا با چرخش موس (و دکمه‌ها) سوالات را زوم کنی. اگر چندین صفحه باشد، دکمه‌های ورق‌زدن فعال است.",
-      targetSelector: ".booklet-viewer-panel"
-    },
-    {
-      title: "۲. پاسخ‌برگ حبابی تعاملی",
-      ico: '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
-      text: "پنجره‌ی سمت چپ پاسخ‌برگ کنکور شماست. با لمس حباب هر گزینه، پاسخ شما بلافاصله ذخیره می‌گردد. همچنین با دکمه‌ی پرچم 🚩 می‌توانی سوالات شک‌دار را برای مرور پایانی علامت‌گذاری کنی.",
-      targetSelector: ".bubble-sheet-panel"
-    },
-    {
-      title: "۳. زمان‌سنج سرور و ثبت نهایی",
-      ico: '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
-      text: "بالای صفحه، تایمر امنِ متصل به سرور و آمار پاسخ‌داده‌ها قرار دارد. پس از اتمام آزمون، دکمه‌ی طلایی «پایان و ثبت» را بزن تا کارنامه و تراز تخمینی شما صادر شود. موفق باشی! 🏆",
-      targetSelector: ".exam-bar"
-    }
+  const desktopTourSteps = [
+    { title:'دفترچه سمت راست', ico:'📄', text:'سوالات اینجاست. با موس بکش، با چرخ موس یا دکمه‌های + و − زوم کن و اگر چند صفحه داری از دکمه‌های صفحه استفاده کن.', targetSelector:'.booklet-viewer-panel', mode:'booklet' },
+    { title:'پاسخ‌برگ سمت چپ', ico:'🎯', text:'برای هر سوال فقط روی گزینه ۱ تا ۴ بزن. پاسخ همان لحظه ذخیره می‌شود. اگر سوالی شک‌دار بود، پرچم را بزن.', targetSelector:'.bubble-sheet-panel', mode:'answer' },
+    { title:'پایان آزمون', ico:'⏱️', text:'بالای صفحه زمان و تعداد پاسخ‌ها را می‌بینی. آخر آزمون دکمه طلایی «پایان و ثبت» را بزن تا کارنامه ساخته شود.', targetSelector:'.exam-bar', mode:'booklet' }
+  ];
+  const mobileTourSteps = [
+    { title:'دو دکمه اصلی پایین سربرگ', ico:'↔️', text:'در موبایل صفحه خلوت شده: با دکمه‌های «دفترچه سوالات» و «پاسخ‌برگ» بین سوالات و جواب‌ها جابه‌جا شو.', targetSelector:'.mobile-exam-switch', mode:'booklet' },
+    { title:'دیدن سوالات', ico:'📄', text:'در تب دفترچه، با یک انگشت برگه را جابه‌جا کن و با دو انگشت زوم کن. اگر صفحه‌ها زیاد بود، از انتخاب صفحه استفاده کن.', targetSelector:'.booklet-viewer-panel', mode:'booklet' },
+    { title:'جواب دادن', ico:'🎯', text:'به تب پاسخ‌برگ برو و گزینه را لمس کن. برای سوالات شک‌دار پرچم بزن؛ برای پاک‌کردن پاسخ، دکمه × همان ردیف را بزن.', targetSelector:'.bubble-sheet-panel', mode:'answer' },
+    { title:'ثبت نهایی', ico:'✅', text:'وقتی تمام شد، از بالای صفحه «پایان و ثبت آزمون» را بزن. قبل از ثبت، خلاصه پاسخ‌داده/بی‌پاسخ را می‌بینی.', targetSelector:'.exam-bar', mode:'answer' }
+  ];
+  const standardDesktopTourSteps = [
+    { title:'صورت سوال', ico:'📝', text:'هر بار یک سوال را می‌بینی. گزینه موردنظرت را انتخاب کن؛ پاسخ به‌صورت خودکار ذخیره می‌شود.', targetSelector:'.exam-q.active' },
+    { title:'حرکت بین سوال‌ها', ico:'➡️', text:'با دکمه‌های قبلی/بعدی پایین صفحه جابه‌جا شو. دکمه فهرست هم همه سوال‌ها را یکجا نشان می‌دهد.', targetSelector:'.exam-nav' },
+    { title:'ثبت نهایی', ico:'✅', text:'آخر آزمون دکمه پایان و ثبت را بزن. قبل از ثبت، خلاصه پاسخ‌ها نمایش داده می‌شود.', targetSelector:'.exam-bar' }
+  ];
+  const standardMobileTourSteps = [
+    { title:'سوال را بخوان', ico:'📝', text:'در موبایل فقط یک سوال نمایش داده می‌شود تا صفحه شلوغ نشود. گزینه را لمس کن تا ذخیره شود.', targetSelector:'.exam-q.active' },
+    { title:'ناوبری پایین صفحه', ico:'⬅️', text:'از دکمه‌های پایین برای سوال بعد/قبل استفاده کن. از دکمه فهرست، شماره سوال‌های پاسخ‌داده و خالی را ببین.', targetSelector:'.exam-nav' },
+    { title:'پایان آزمون', ico:'✅', text:'وقتی تمام شد، ثبت نهایی را بزن. اگر زمان تمام شود سیستم خودکار ثبت می‌کند.', targetSelector:'.exam-bar' }
   ];
 
   let currTourStep = 0;
-  let typeInterval = null;
+  let activeTourSteps = desktopTourSteps;
 
-  function runTourStep(stepIndex) {
-    currTourStep = stepIndex;
-    const s = tourSteps[currTourStep]; if(!s) return;
-    
-    if(prevTourBtn) prevTourBtn.disabled = (currTourStep === 0);
-    if(nextTourBtn) nextTourBtn.innerHTML = (currTourStep === tourSteps.length - 1) ? '✓ شروع آزمون' : 'گام بعدی ▶';
-    
-    tourDots?.forEach(d => {
-      const active = parseInt(d.dataset.step) === currTourStep;
-      d.classList.toggle('active', active);
-      d.style.background = active ? 'var(--gold)' : 'var(--surface-2)';
-    });
-
-    if(tourIco)   tourIco.innerHTML   = s.ico;
-    if(tourTitle) tourTitle.innerHTML = s.title;
-
-    document.querySelectorAll('.booklet-viewer-panel, .bubble-sheet-panel, .exam-bar').forEach(el => {
-      el.style.boxShadow   = '';
-      el.style.borderColor = 'var(--border-soft)';
-    });
-    const targetEl = document.querySelector(s.targetSelector);
-    if(targetEl) {
-      targetEl.style.boxShadow   = '0 0 0 4px var(--gold)';
-      targetEl.style.borderColor = 'var(--gold)';
-    }
-
-    if(tourText) tourText.innerHTML = '';
-    clearInterval(typeInterval);
-    let charIdx = 0;
-    tourText.innerHTML = ''; 
-    typeInterval = setInterval(() => {
-      if(charIdx < s.text.length) {
-        tourText.innerHTML += s.text.charAt(charIdx);
-        charIdx++;
-      } else {
-        clearInterval(typeInterval);
-      }
-    }, 18);
+  function setMobileMode(mode){
+    if (!isSamurai || !isPhone()) return;
+    env.classList.toggle('mobile-booklet-mode', mode === 'booklet');
+    env.classList.toggle('mobile-answer-mode', mode === 'answer');
+    document.querySelectorAll('[data-mobile-exam-mode]').forEach(b => b.classList.toggle('active', b.dataset.mobileExamMode === mode));
+    setTimeout(() => { if (mode === 'booklet') resetViewer(); }, 70);
   }
-
+  function clearTourHighlight(){
+    document.querySelectorAll('.booklet-viewer-panel, .bubble-sheet-panel, .exam-bar, .mobile-exam-switch, .exam-q, .exam-nav').forEach(el => el.classList.remove('exam-tour-highlight'));
+  }
+  function buildTourDots(){
+    if (!tourDotsBox) return;
+    tourDotsBox.innerHTML = activeTourSteps.map((_,i)=>`<button type="button" class="tour-dot" data-step="${i}" aria-label="گام ${i+1}"></button>`).join('');
+    tourDotsBox.querySelectorAll('.tour-dot').forEach(dot => dot.addEventListener('click', () => runTourStep(parseInt(dot.dataset.step || '0'))));
+  }
+  function runTourStep(stepIndex) {
+    currTourStep = Math.max(0, Math.min(stepIndex, activeTourSteps.length - 1));
+    const s = activeTourSteps[currTourStep]; if(!s) return;
+    setMobileMode(s.mode || 'booklet');
+    clearTourHighlight();
+    setTimeout(() => document.querySelector(s.targetSelector)?.classList.add('exam-tour-highlight'), 90);
+    if(prevTourBtn) prevTourBtn.disabled = currTourStep === 0;
+    if(nextTourBtn) nextTourBtn.textContent = currTourStep === activeTourSteps.length - 1 ? 'شروع آزمون' : 'بعدی';
+    if(tourIco) tourIco.textContent = s.ico;
+    if(tourTitle) tourTitle.textContent = s.title;
+    if(tourText) tourText.textContent = s.text;
+    tourDotsBox?.querySelectorAll('.tour-dot').forEach(d => d.classList.toggle('active', parseInt(d.dataset.step || '0') === currTourStep));
+  }
+  function openTour(force=false){
+    if (!tourOverlay) return;
+    activeTourSteps = isSamurai ? (isPhone() ? mobileTourSteps : desktopTourSteps) : (isPhone() ? standardMobileTourSteps : standardDesktopTourSteps);
+    buildTourDots();
+    tourOverlay.classList.remove('hidden');
+    runTourStep(0);
+    if (force) localStorage.removeItem('madar_exam_tour_shown_v2_' + (window.EXAM_ID_PARAM || 0));
+  }
   function finishTour() {
-    clearInterval(typeInterval);
     if(tourOverlay) tourOverlay.classList.add('hidden');
-    document.querySelectorAll('.booklet-viewer-panel, .bubble-sheet-panel, .exam-bar').forEach(el => {
-      el.style.boxShadow   = '';
-      el.style.borderColor = 'var(--border-soft)';
-    });
-    localStorage.setItem('madar_exam_tour_shown_' + (window.EXAM_ID_PARAM || 0), '1');
+    clearTourHighlight();
+    localStorage.setItem('madar_exam_tour_shown_v2_' + (window.EXAM_ID_PARAM || 0), '1');
   }
 
   skipTourBtn?.addEventListener('click', finishTour);
-  
-  nextTourBtn?.addEventListener('click', () => {
-    if (currTourStep === tourSteps.length - 1) {
-      finishTour();
-    } else {
-      runTourStep(currTourStep + 1);
-    }
-  });
-
-  prevTourBtn?.addEventListener('click', () => {
-    runTourStep(currTourStep - 1);
-  });
-
+  replayTourBtn?.addEventListener('click', () => openTour(true));
+  nextTourBtn?.addEventListener('click', () => currTourStep === activeTourSteps.length - 1 ? finishTour() : runTourStep(currTourStep + 1));
+  prevTourBtn?.addEventListener('click', () => runTourStep(currTourStep - 1));
+  tourOverlay?.addEventListener('click', e => { if(e.target === tourOverlay) finishTour(); });
+  window.addEventListener('resize', () => { if(tourOverlay && !tourOverlay.classList.contains('hidden')) openTour(false); });
   window.addEventListener('load', () => {
-    if (!localStorage.getItem('madar_exam_tour_shown_' + (window.EXAM_ID_PARAM || 0)) && tourOverlay && document.querySelector('.exam-samurai-layout')) {
-      tourOverlay.classList.remove('hidden');
-      runTourStep(0);
-    }
+    if (!localStorage.getItem('madar_exam_tour_shown_v2_' + (window.EXAM_ID_PARAM || 0))) openTour(false);
   });
 
   /* =================================================================

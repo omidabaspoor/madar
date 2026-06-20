@@ -25,6 +25,7 @@ function page_head(string $title, string $desc = '', array $extraCss = []): void
   <link rel="manifest" href="<?= url('manifest.php') ?>">
   <meta name="sw-url" content="<?= url('sw.js') ?>">
   <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
+  <link rel="stylesheet" href="<?= asset('css/persian_datepicker.css') ?>">
   <?php foreach ($extraCss as $c): ?>
   <link rel="stylesheet" href="<?= asset('css/' . $c) ?>">
   <?php endforeach; ?>
@@ -53,6 +54,7 @@ function page_foot(array $extraJs = []): void
     ?>
   <div id="toast-wrap"></div>
   <script src="<?= asset('js/app.js') ?>"></script>
+  <script src="<?= asset('js/persian_datepicker.js') ?>"></script>
   <?php foreach ($extraJs as $j): ?>
   <script src="<?= asset('js/' . $j) ?>"></script>
   <?php endforeach; ?>

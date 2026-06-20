@@ -156,7 +156,7 @@ function render_result(array $rep, bool $showAnswers = true): void
 </div>
 
 <!-- ===== DIAGNOSTIC ROOT CAUSE MASTER SUMMARY ===== -->
-<?php if(array_sum($diagCounts) > 0): ?>
+<?php if(false && array_sum($diagCounts) > 0): ?>
 <div class="panel mb-4" style="background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--r-lg);padding:24px">
   <div class="panel-head mb-4 between wrap gap-2" style="align-items:center">
     <h3 style="font-size:1.25rem;font-weight:900;color:var(--info);display:flex;align-items:center;gap:10px"><?= icon('chart',22) ?> نمودار خلاصه ریشه‌یابی و آسیب‌شناسی اشتباهات آزمون</h3>
@@ -177,7 +177,7 @@ function render_result(array $rep, bool $showAnswers = true): void
 <!-- ===== INTERACTIVE ANALYTICAL SOLUTIONS LIST ===== -->
 <div class="between mb-4 wrap gap-2" style="align-items:center">
   <h3 style="font-size:1.4rem;font-weight:900;color:var(--text-1);display:flex;align-items:center;gap:10px">
-    <?= icon('list',24) ?> پاسخنامه تشریحی و آسیب‌شناسی تعاملی
+    <?= icon('list',24) ?> پاسخنامه تشریحی آزمون
   </h3>
   <div class="flex gap-1 wrap ans-filters-group" style="background:var(--surface-2);padding:4px;border-radius:999px;border:1px solid var(--border-soft)">
     <button type="button" class="ans-filter-btn active badge" data-filter="all" style="padding:6px 14px;cursor:pointer;font-weight:800;border:none">همه‌ی سوالات</button>
@@ -253,8 +253,8 @@ function render_result(array $rep, bool $showAnswers = true): void
         </div>
       </div>
 
-      <!-- INTERACTIVE ERROR POST-MORTEM & DIAGNOSTIC BOX -->
-      <?php if($st==='wrong' || $st==='blank'): ?>
+      <!-- تحلیل علت‌های غلط/نزده از کارنامه حذف شد؛ در صفحه «تحلیل آزمون داخلی مَدار» انجام می‌شود. -->
+      <?php if(false && ($st==='wrong' || $st==='blank')): ?>
         <div class="diagnostic-box mt-3 panel flex" style="flex-direction:column;gap:14px;background:var(--surface-2);border:2px solid <?= $dReason?'var(--info)':'var(--border)' ?>;padding:20px;border-radius:16px">
           <div class="between wrap gap-2" style="align-items:center;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:12px">
             <b style="color:var(--info);font-size:.9۵rem;display:flex;align-items:center;gap:8px">
