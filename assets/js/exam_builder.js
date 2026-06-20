@@ -81,6 +81,22 @@
   }
 
   function examType(){ return document.querySelector('input[name="exam_type"]:checked')?.value || 'single'; }
+  function checkedValues(sel){ return [...document.querySelectorAll(sel+':checked')].map(i=>i.value); }
+  function updateTargetSummary(){
+    const fields = checkedValues('input[name="target_fields[]"]');
+    const grades = checkedValues('input[name="target_grades[]"]');
+    document.querySelectorAll('.target-chip').forEach(ch => ch.classList.toggle('active', !!ch.querySelector('input')?.checked));
+    const el = document.getElementById('targetSummary');
+    if (!el) return;
+    if (!fields.length && !grades.length) { el.innerHTML = '🌍 این آزمون برای <b>همه‌ی دانش‌آموزان مجاز</b> منتشر می‌شود.'; return; }
+    el.innerHTML = `🎯 مخاطب آزمون: ${fields.length ? '<b>رشته:</b> '+fields.join('، ') : '<b>همه رشته‌ها</b>'} · ${grades.length ? '<b>پایه:</b> '+grades.join('، ') : '<b>همه پایه‌ها</b>'}`;
+  }
+  document.querySelectorAll('input[name="target_fields[]"],input[name="target_grades[]"]').forEach(i=>i.addEventListener('change',()=>{ metaDirty=true; updateTargetSummary(); }));
+  document.getElementById('targetAllBtn')?.addEventListener('click',()=>{
+    document.querySelectorAll('input[name="target_fields[]"],input[name="target_grades[]"]').forEach(i=>i.checked=false);
+    metaDirty=true; updateTargetSummary(); toast('مخاطب آزمون روی «همه» تنظیم شد','success',1400);
+  });
+  updateTargetSummary();
 
   function metaPayload(){
     return {
@@ -95,6 +111,8 @@
       show_review:document.getElementById('m_rev').checked?'1':'0',
       shuffle_questions:document.getElementById('m_shuf')?.checked?'1':'0',
       creation_mode:creationMode(),
+      target_fields:checkedValues('input[name="target_fields[]"]'),
+      target_grades:checkedValues('input[name="target_grades[]"]'),
     };
   }
 
@@ -222,108 +240,224 @@
     } catch(err) { toast(err.error || 'خطا در حذف', 'error'); setStatus('saved','آماده'); }
   });
 
-  // Interactive UI for 100 Bubble Clicking Key Grid
+  // Interactive answer-key manager: editable, insertable, deletable question rows
   const quickKeyInput  = document.getElementById('quickKeyInput');
   const bubbleStudio   = document.querySelector('.bubble-grid-studio');
   const keyBadge       = document.getElementById('keyQCountBadge');
 
-  function syncKeyInputToBubbles() {
-    let kStr = '';
-    bubbleStudio?.querySelectorAll('.bg-item').forEach(item => {
-      const activeOpt = item.querySelector('.bubble-btn.active')?.dataset.opt || '0';
-      kStr += activeOpt;
-    });
-    if(quickKeyInput) quickKeyInput.value = kStr.replace(/0+$/, ''); // trim trailing untouched zeros
-    if(keyBadge) keyBadge.textContent = faNum(kStr.replace(/0+$/, '').length) + ' سوال';
+  function normalizeKey(v){
+    return String(v || '')
+      .replace(/[۱١]/g,'1').replace(/[۲٢]/g,'2').replace(/[۳٣]/g,'3').replace(/[۴٤]/g,'4')
+      .replace(/[^1-4]/g, '');
   }
-
-  function syncBubblesToKeyInput() {
-    const val = (quickKeyInput?.value || '').replace(/[۱١]/g,'1').replace(/[۲٢]/g,'2').replace(/[۳٣]/g,'3').replace(/[۴٤]/g,'4').replace(/[^1-4]/g, '');
-    if(keyBadge) keyBadge.textContent = faNum(val.length) + ' سوال';
-    
-    // اطمینان از وجود کافی آیتم حباب
-    const currItems = bubbleStudio?.querySelectorAll('.bg-item') || [];
-    if (val.length > currItems.length) {
-      appendNewBubbles(val.length - currItems.length);
+  function bubbleItems(){ return Array.from(bubbleStudio?.querySelectorAll('.bg-item') || []); }
+  function selectedOpt(item){ return parseInt(item.querySelector('.bubble-btn.active')?.dataset.opt || '0') || 0; }
+  function nextRealNum(){
+    const nums = bubbleItems().map(it => parseInt(it.querySelector('.bubble-qnum-input')?.value || it.dataset.realnum || '0')).filter(Boolean);
+    return nums.length ? Math.max(...nums) + 1 : 1;
+  }
+  function bubbleCardHTML(realNum, opt = 0, extraClass = ''){
+    realNum = parseInt(realNum) || nextRealNum();
+    opt = parseInt(opt) || 0;
+    return `<div class="bg-item qkey-card ${extraClass}" data-realnum="${realNum}">
+      <div class="qkey-card-top">
+        <span class="qkey-order">#</span>
+        <label class="qkey-num-wrap"><span>شماره سوال</span><input type="number" class="input bubble-qnum-input" value="${realNum}" min="1" title="شماره واقعی سوال در دفترچه"></label>
+        <div class="qkey-actions" title="کنترل این سوال">
+          <button type="button" data-qkey-action="insert-before" title="افزودن سوال قبل از این">+قبل</button>
+          <button type="button" data-qkey-action="insert-after" title="افزودن سوال بعد از این">+بعد</button>
+          <button type="button" data-qkey-action="move-up" title="انتقال به بالا">↑</button>
+          <button type="button" data-qkey-action="move-down" title="انتقال به پایین">↓</button>
+          <button type="button" data-qkey-action="clear" title="پاک کردن پاسخ">پاک</button>
+          <button type="button" class="danger" data-qkey-action="delete" title="حذف سوال">حذف</button>
+        </div>
+      </div>
+      <div class="qkey-options" aria-label="گزینه صحیح">
+        ${[1,2,3,4].map(oi => `<button type="button" class="bubble-btn ${opt===oi?'active':''}" data-opt="${oi}">${oi}</button>`).join('')}
+      </div>
+    </div>`;
+  }
+  function ensureBubbleChrome(item){
+    item.classList.add('qkey-card');
+    let top = item.querySelector('.qkey-card-top');
+    if (!top) {
+      const oldNumInput = item.querySelector('.bubble-qnum-input');
+      const realNum = parseInt(oldNumInput?.value || item.dataset.realnum || item.dataset.qnum || '1') || 1;
+      top = document.createElement('div');
+      top.className = 'qkey-card-top';
+      top.innerHTML = `<span class="qkey-order">#</span>
+        <label class="qkey-num-wrap"><span>شماره سوال</span><input type="number" class="input bubble-qnum-input" value="${realNum}" min="1" title="شماره واقعی سوال در دفترچه"></label>
+        <div class="qkey-actions" title="کنترل این سوال">
+          <button type="button" data-qkey-action="insert-before" title="افزودن سوال قبل از این">+قبل</button>
+          <button type="button" data-qkey-action="insert-after" title="افزودن سوال بعد از این">+بعد</button>
+          <button type="button" data-qkey-action="move-up" title="انتقال به بالا">↑</button>
+          <button type="button" data-qkey-action="move-down" title="انتقال به پایین">↓</button>
+          <button type="button" data-qkey-action="clear" title="پاک کردن پاسخ">پاک</button>
+          <button type="button" class="danger" data-qkey-action="delete" title="حذف سوال">حذف</button>
+        </div>`;
+      item.prepend(top);
+      // حذف هدر قدیمی اگر فقط شامل input شماره بود
+      const oldHead = Array.from(item.children).find(ch => ch !== top && ch.querySelector?.('.bubble-qnum-input'));
+      if (oldHead) oldHead.remove();
     }
-
-    bubbleStudio?.querySelectorAll('.bg-item').forEach((item, idx) => {
-      const charVal = val[idx];
-      item.querySelectorAll('.bubble-btn').forEach(btn => {
-        const isOpt = btn.dataset.opt === charVal;
-        btn.classList.toggle('active', isOpt);
-        btn.style.background = isOpt ? 'var(--gold)' : 'var(--surface-2)';
-        btn.style.color      = isOpt ? '#000'        : 'var(--text-2)';
-      });
+    const btnWrap = item.querySelector('.qkey-options') || item.querySelector('.flex.gap-1');
+    if (btnWrap && !btnWrap.classList.contains('qkey-options')) btnWrap.classList.add('qkey-options');
+    item.querySelectorAll('.bubble-btn').forEach(btn => {
+      btn.style.background = '';
+      btn.style.color = '';
     });
+  }
+  function updateBubbleState(){
+    const items = bubbleItems();
+    const seen = new Map();
+    let answered = 0;
+    items.forEach((item, idx) => {
+      ensureBubbleChrome(item);
+      item.dataset.qnum = String(idx + 1);
+      const order = item.querySelector('.qkey-order');
+      if (order) order.textContent = faNum(idx + 1);
+      const inp = item.querySelector('.bubble-qnum-input');
+      const real = parseInt(inp?.value || item.dataset.realnum || idx + 1) || (idx + 1);
+      item.dataset.realnum = String(real);
+      if (selectedOpt(item)) answered++;
+      item.classList.remove('duplicate-num','empty-answer');
+      if (!selectedOpt(item)) item.classList.add('empty-answer');
+      if (seen.has(real)) { item.classList.add('duplicate-num'); seen.get(real)?.classList.add('duplicate-num'); }
+      else seen.set(real, item);
+      item.querySelector('[data-qkey-action="move-up"]')?.toggleAttribute('disabled', idx === 0);
+      item.querySelector('[data-qkey-action="move-down"]')?.toggleAttribute('disabled', idx === items.length - 1);
+    });
+    syncKeyInputToBubbles(false);
+    if(keyBadge) keyBadge.textContent = `${faNum(answered)} پاسخ از ${faNum(items.length)} سوال`;
+  }
+  function syncKeyInputToBubbles(updateBadge = true) {
+    let kStr = '';
+    bubbleItems().forEach(item => { kStr += String(selectedOpt(item) || '0'); });
+    if(quickKeyInput) quickKeyInput.value = kStr.replace(/0+$/, '');
+    if(updateBadge) {
+      const answered = bubbleItems().filter(selectedOpt).length;
+      if(keyBadge) keyBadge.textContent = `${faNum(answered)} پاسخ از ${faNum(bubbleItems().length)} سوال`;
+    }
+  }
+  function appendNewBubbles(count, afterEl = null, startNum = null) {
+    if (!bubbleStudio) return [];
+    const created = [];
+    let n = startNum || nextRealNum();
+    for (let i=0; i<count; i++) {
+      const tpl = document.createElement('template');
+      tpl.innerHTML = bubbleCardHTML(n++).trim();
+      const el = tpl.content.firstElementChild;
+      if (afterEl) { afterEl.insertAdjacentElement('afterend', el); afterEl = el; }
+      else bubbleStudio.appendChild(el);
+      created.push(el);
+    }
+    updateBubbleState();
+    return created;
+  }
+  function shiftQuestionNumbers(fromNum, delta, startIndex = 0){
+    bubbleItems().forEach((item, idx) => {
+      if (idx < startIndex) return;
+      const inp = item.querySelector('.bubble-qnum-input');
+      const val = parseInt(inp?.value || item.dataset.realnum || '0') || 0;
+      if (val >= fromNum && inp) inp.value = val + delta;
+    });
+  }
+  function insertBubbleRelative(ref, where){
+    const items = bubbleItems();
+    const refIdx = items.indexOf(ref);
+    const refNum = parseInt(ref.querySelector('.bubble-qnum-input')?.value || ref.dataset.realnum || refIdx + 1) || (refIdx + 1);
+    const newNum = where === 'before' ? refNum : refNum + 1;
+    shiftQuestionNumbers(newNum, 1, where === 'before' ? refIdx : refIdx + 1);
+    let el;
+    if (where === 'before') {
+      const tpl = document.createElement('template'); tpl.innerHTML = bubbleCardHTML(newNum, 0, 'newly-added').trim();
+      el = tpl.content.firstElementChild; ref.insertAdjacentElement('beforebegin', el);
+    } else {
+      el = appendNewBubbles(1, ref, newNum)[0]; el?.classList.add('newly-added');
+    }
+    updateBubbleState();
+    el?.scrollIntoView({block:'center', behavior:'smooth'});
+    el?.querySelector('.bubble-btn')?.focus();
+  }
+  function syncBubblesToKeyInput() {
+    const val = normalizeKey(quickKeyInput?.value || '');
+    if (quickKeyInput) quickKeyInput.value = val;
+    const currItems = bubbleItems();
+    if (val.length > currItems.length) appendNewBubbles(val.length - currItems.length);
+    bubbleItems().forEach((item, idx) => {
+      const charVal = val[idx] || '';
+      item.querySelectorAll('.bubble-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.opt === charVal));
+    });
+    updateBubbleState();
   }
 
   quickKeyInput?.addEventListener('input', syncBubblesToKeyInput);
 
   bubbleStudio?.addEventListener('click', e => {
-    const btn = e.target.closest('.bubble-btn'); if (!btn) return;
-    const parent = btn.closest('.bg-item');
-    parent.querySelectorAll('.bubble-btn').forEach(b => {
-      b.classList.remove('active');
-      b.style.background = 'var(--surface-2)';
-      b.style.color      = 'var(--text-2)';
-    });
-    btn.classList.add('active');
-    btn.style.background = 'var(--gold)';
-    btn.style.color      = '#000';
-    syncKeyInputToBubbles();
+    const btn = e.target.closest('.bubble-btn');
+    if (btn) {
+      const parent = btn.closest('.bg-item');
+      const wasActive = btn.classList.contains('active');
+      parent.querySelectorAll('.bubble-btn').forEach(b => b.classList.remove('active'));
+      if (!wasActive) btn.classList.add('active');
+      updateBubbleState();
+      return;
+    }
+    const actionBtn = e.target.closest('[data-qkey-action]');
+    if (!actionBtn) return;
+    const item = actionBtn.closest('.bg-item');
+    const action = actionBtn.dataset.qkeyAction;
+    if (action === 'insert-before') insertBubbleRelative(item, 'before');
+    if (action === 'insert-after') insertBubbleRelative(item, 'after');
+    if (action === 'delete') {
+      if (bubbleItems().length <= 1) { toast('حداقل یک سوال باید باقی بماند', 'error'); return; }
+      if (!confirm('این سوال از پاسخنامه حذف شود؟')) return;
+      item.remove(); updateBubbleState();
+    }
+    if (action === 'clear') { item.querySelectorAll('.bubble-btn').forEach(b => b.classList.remove('active')); updateBubbleState(); }
+    if (action === 'move-up') { const prev = item.previousElementSibling; if (prev) { prev.insertAdjacentElement('beforebegin', item); updateBubbleState(); } }
+    if (action === 'move-down') { const next = item.nextElementSibling; if (next) { next.insertAdjacentElement('afterend', item); updateBubbleState(); } }
+  });
+  bubbleStudio?.addEventListener('input', e => {
+    if (!e.target.matches('.bubble-qnum-input')) return;
+    const item = e.target.closest('.bg-item');
+    if (item) item.dataset.realnum = e.target.value;
+    updateBubbleState();
   });
 
-  function appendNewBubbles(count) {
-    if (!bubbleStudio) return;
-    const startIdx = bubbleStudio.querySelectorAll('.bg-item').length + 1;
-    let html = '';
-    for (let qi = startIdx; qi < startIdx + count; qi++) {
-      html += `<div class="bg-item" data-qnum="${qi}" style="background:var(--surface-1);padding:8px;border-radius:8px;display:flex;flex-direction:column;align-items:center;border:1px solid var(--border-soft)">
-        <span style="font-size:.75rem;color:var(--text-3);font-weight:bold;margin-bottom:4px">Q${qi}</span>
-        <div class="flex gap-1">
-          <button type="button" class="bubble-btn" data-opt="1" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">1</button>
-          <button type="button" class="bubble-btn" data-opt="2" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">2</button>
-          <button type="button" class="bubble-btn" data-opt="3" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">3</button>
-          <button type="button" class="bubble-btn" data-opt="4" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">4</button>
-        </div>
-      </div>`;
-    }
-    bubbleStudio.insertAdjacentHTML('beforeend', html);
-  }
-
   document.getElementById('add10BubblesBtn')?.addEventListener('click', () => {
-    appendNewBubbles(10);
-    bubbleStudio.scrollTop = bubbleStudio.scrollHeight;
+    const added = appendNewBubbles(10);
+    added[0]?.scrollIntoView({block:'center', behavior:'smooth'});
+    toast('۱۰ ردیف سوال جدید به انتهای پاسخنامه اضافه شد', 'success', 1700);
   });
 
   document.getElementById('saveQuickSheetSuiteBtn')?.addEventListener('click', async function() {
+    updateBubbleState();
     const customKeys = [];
-    document.querySelectorAll('.bubble-grid-studio .bg-item').forEach(item => {
-        const qnum = parseInt(item.querySelector('.bubble-qnum-input')?.value) || parseInt(item.dataset.realnum) || parseInt(item.dataset.qnum) || 0;
-        const activeBtn = item.querySelector('.bubble-btn[style*="var(--gold)"]');
-        const optVal = activeBtn ? parseInt(activeBtn.dataset.opt) : 0;
-        if (qnum && optVal) {
-            customKeys.push({ question_number: qnum, correct_opt: optVal });
-        }
+    const dupNums = bubbleItems().filter(it => it.classList.contains('duplicate-num')).map(it => it.querySelector('.bubble-qnum-input')?.value).filter(Boolean);
+    if (dupNums.length && !confirm('چند شماره سوال تکراری وجود دارد. با همین وضعیت ذخیره شود؟')) return;
+
+    bubbleItems().forEach(item => {
+      const qnum = parseInt(item.querySelector('.bubble-qnum-input')?.value || item.dataset.realnum || item.dataset.qnum || '0') || 0;
+      const optVal = selectedOpt(item);
+      if (qnum && optVal) customKeys.push({ question_number: qnum, correct_opt: optVal });
     });
 
-    const rawKey = quickKeyInput ? quickKeyInput.value : '';
-    const answerKey = rawKey.replace(/[۱١]/g,'1').replace(/[۲٢]/g,'2').replace(/[۳٣]/g,'3').replace(/[۴٤]/g,'4').replace(/[^1-4]/g, '');
-
-    if (!answerKey && customKeys.length === 0) { toast('لطفاً پاسخنامه کلیدی را وارد کنید یا روی حباب‌ها کلیک کنید', 'error'); return; }
+    const answerKey = normalizeKey(quickKeyInput ? quickKeyInput.value : '');
+    if (customKeys.length === 0) { toast('حداقل پاسخ صحیح یک سوال را انتخاب کنید', 'error'); return; }
+    const emptyCount = bubbleItems().length - customKeys.length;
+    if (emptyCount > 0 && !confirm(`${faNum(emptyCount)} سوال بدون پاسخ صحیح مانده است و ساخته نمی‌شود. ادامه می‌دهید؟`)) return;
     if (!examId) {
       const ok = await saveMeta();
       if (!ok || !examId) { toast('ابتدا عنوان آزمون را وارد کن', 'error'); return; }
     }
-    
     const oldHtml = this.innerHTML;
     this.disabled = true; this.innerHTML = '<span class="spinner"></span> در حال ساخت سوالات…';
     const sheetPath = thumbsGrid?.querySelector('.sheet-thumb-item')?.dataset.spath || '';
 
     try {
       const d = await api(API, { method: 'POST', body: { action: 'quick_sheet_generate', exam_id: examId, sheet_path: sheetPath, answer_key: answerKey, custom_keys: customKeys } });
-      toast(`آزمون با موفقیت ساخته و شماره‌گذاری شد (${faNum(d.q_count)} سوال) 🎉`, 'success');
+      toast(`آزمون با موفقیت ساخته شد (${faNum(d.q_count)} سوال) 🎉`, 'success');
       setTimeout(() => { location.href = `${location.pathname}?id=${examId}&step=2&mode=quick_sheet`; }, 650);
     } catch(err) {
       toast(err.error || 'خطا در ثبت نهایی آزمون', 'error');
@@ -332,50 +466,37 @@
   });
 
   window.applyStartNumbering = function() {
-      const startX = parseInt(document.getElementById('startQNumInput')?.value) || 1;
-      let curr = startX;
-      document.querySelectorAll('.bubble-grid-studio .bg-item').forEach(item => {
-          item.dataset.realnum = curr;
-          const inp = item.querySelector('.bubble-qnum-input');
-          if (inp) inp.value = curr;
-          curr++;
-      });
-      toast(`شماره‌گذاری حباب‌ها از عدد ${faNum(startX)} اعمال شد`, 'success');
+    const startX = parseInt(document.getElementById('startQNumInput')?.value) || 1;
+    let curr = startX;
+    bubbleItems().forEach(item => {
+      const inp = item.querySelector('.bubble-qnum-input');
+      if (inp) inp.value = curr;
+      item.dataset.realnum = curr;
+      curr++;
+    });
+    updateBubbleState();
+    toast(`شماره‌گذاری همه سوالات از ${faNum(startX)} اعمال شد`, 'success');
   };
 
   window.addSpecificCustomBubble = function() {
-      const spInp = document.getElementById('specificQNumInput');
-      const realNum = parseInt(spInp?.value) || 0;
-      if (!realNum) { toast('شماره دقیق سوال را وارد کنید', 'error'); return; }
-      
-      const studio = document.getElementById('bubbleGridStudio');
-      if (!studio) return;
-      
-      const html = `
-        <div class="bg-item" data-qnum="999" data-realnum="${realNum}" style="background:var(--surface-1);padding:10px;border-radius:12px;display:flex;flex-direction:column;align-items:center;border:1px solid var(--gold)">
-          <div class="flex items-center gap-1 mb-2 w-full justify-center">
-            <span style="font-size:.7۵rem;color:var(--text-3);font-weight:bold;">Q</span>
-            <input type="number" class="input bubble-qnum-input font-mono font-bold text-center text-xs p-1 h-7 w-16" value="${realNum}" title="تنظیم دستی شماره این سوال" onchange="updateBubbleRealNum(this)">
-          </div>
-          <div class="flex gap-1">
-            ${[1,2,3,4].map(oi => `
-              <button type="button" class="bubble-btn" data-opt="${oi}" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border-soft);background:var(--surface-2);color:var(--text-2);font-size:.7rem;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">
-                ${oi}
-              </button>
-            `).join('')}
-          </div>
-        </div>
-      `;
-      studio.insertAdjacentHTML('beforeend', html);
-      studio.scrollTop = studio.scrollHeight;
-      spInp.value = '';
-      toast(`سوال جدید با شماره اختصاصی ${faNum(realNum)} افزوده شد`, 'success');
+    const spInp = document.getElementById('specificQNumInput');
+    const realNum = parseInt(spInp?.value) || 0;
+    if (!realNum) { toast('شماره دقیق سوال را وارد کنید', 'error'); return; }
+    const el = appendNewBubbles(1, null, realNum)[0];
+    el?.classList.add('newly-added');
+    el?.scrollIntoView({block:'center', behavior:'smooth'});
+    el?.querySelector('.bubble-btn')?.focus();
+    spInp.value = '';
+    toast(`سوال جدید با شماره ${faNum(realNum)} افزوده شد`, 'success');
   };
 
   window.updateBubbleRealNum = function(inp) {
-      const item = inp.closest('.bg-item');
-      if (item) item.dataset.realnum = inp.value;
+    const item = inp.closest('.bg-item');
+    if (item) item.dataset.realnum = inp.value;
+    updateBubbleState();
   };
+
+  updateBubbleState();
 
   window.renumberSectionQuestions = function(sectionId) {
       const answer = prompt('شماره سوالات این سرفصل/درس از چه عددی شروع شود؟', '101');
@@ -422,6 +543,7 @@
         opt3:card.querySelector('[data-opt-text="3"]').value,
         opt4:card.querySelector('[data-opt-text="4"]').value,
         correct_opt:correct?correct.value:1,
+        question_number:card.querySelector('[data-q-number]')?.value || '',
         explanation:card.querySelector('[data-q-exp]')?.value||'',
       });
     });
@@ -502,13 +624,39 @@
     try{
       const d=await api(API,{method:'POST',body:{action:'add_question',exam_id:examId,section_id:sec.dataset.section}});
       const idx=sec.querySelectorAll('.q-card').length+1;
-      const html=questionHTML(d.id,idx);
+      const html=questionHTML(d.id,d.question_number || idx);
       sec.querySelector('.questions-wrap').insertAdjacentHTML('beforeend',html);
       renumber(sec); updateCounts();
       const card=sec.querySelector(`.q-card[data-question="${d.id}"]`);
+      card.querySelector('[data-q-number]') && (card.querySelector('[data-q-number]').value = d.question_number || idx);
       card.querySelector('.q-text').focus();
       card.scrollIntoView({block:'center',behavior:'smooth'});
     }catch(err){ toast(err.error||'خطا','error'); }
+  });
+
+  root.addEventListener('click',async(e)=>{
+    const b=e.target.closest('[data-insert-question-after]'); if(!b) return;
+    const card=b.closest('.q-card'); const sec=card.closest('.exam-section');
+    if(!card || !sec) return;
+    if(dirty.size) await autosave();
+    try{
+      const d=await api(API,{method:'POST',body:{action:'add_question',exam_id:examId,section_id:sec.dataset.section,after_question_id:card.dataset.question}});
+      const displayNum = d.question_number || (parseInt(card.querySelector('[data-q-number]')?.value || '0') + 1) || (Array.from(sec.querySelectorAll('.q-card')).indexOf(card)+2);
+      const html=questionHTML(d.id,displayNum);
+      card.insertAdjacentHTML('afterend',html);
+      // شماره‌های کارت‌های بعدی را در UI هم یک واحد جلو ببر تا با دیتابیس هم‌خوان شود.
+      let bump=false;
+      sec.querySelectorAll('.q-card').forEach(c=>{
+        if(c.dataset.question == d.id){ bump=true; return; }
+        if(bump){ const inp=c.querySelector('[data-q-number]'); if(inp && inp.value) inp.value=parseInt(inp.value)+1; }
+      });
+      renumber(sec); updateCounts();
+      const newCard=sec.querySelector(`.q-card[data-question="${d.id}"]`);
+      newCard.querySelector('[data-q-number]') && (newCard.querySelector('[data-q-number]').value = displayNum);
+      newCard.querySelector('.q-text').focus();
+      newCard.scrollIntoView({block:'center',behavior:'smooth'});
+      toast('سوال جدید بین سوال‌ها اضافه شد', 'success', 1600);
+    }catch(err){ toast(err.error||'خطا در افزودن سوال بین سوال‌ها','error'); }
   });
 
   root.addEventListener('click',async(e)=>{
@@ -607,8 +755,10 @@
     return `<div class="q-card" data-question="${id}">
       <div class="q-top">
         <span class="q-num">${faNum(num)}</span>
+        <input class="input" type="number" data-q-number value="${num}" min="1" title="شماره واقعی سوال" style="width:78px;text-align:center;font-weight:900">
         <textarea class="q-text" data-q-text rows="1" placeholder="متن سوال را بنویسید…"></textarea>
         <div class="q-tools">
+          <button type="button" class="btn btn-ghost btn-sm" data-insert-question-after style="border-color:rgba(203,172,128,.35);color:var(--gold-light);font-weight:900">+ بین</button>
           <label class="q-img-btn" data-tip="افزودن عکس">${ICO.clip}<input type="file" accept="image/*" data-q-img hidden></label>
           <button class="btn btn-ghost btn-sm btn-icon" data-del-question style="color:var(--danger)">${ICO.trash}</button>
         </div>

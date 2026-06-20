@@ -47,6 +47,8 @@ function ensure_exam_studio_schema(): void {
         if (empty($cols['sheet_path']))       $adds[] = "ADD COLUMN sheet_path VARCHAR(255) DEFAULT NULL AFTER creation_mode";
         if (empty($cols['sheet_paths_json'])) $adds[] = "ADD COLUMN sheet_paths_json TEXT DEFAULT NULL AFTER sheet_path";
         if (empty($cols['answer_key']))       $adds[] = "ADD COLUMN answer_key VARCHAR(500) DEFAULT NULL AFTER sheet_paths_json";
+        if (empty($cols['target_fields_json'])) $adds[] = "ADD COLUMN target_fields_json TEXT DEFAULT NULL AFTER assign_all";
+        if (empty($cols['target_grades_json'])) $adds[] = "ADD COLUMN target_grades_json TEXT DEFAULT NULL AFTER target_fields_json";
         if ($adds) db()->exec('ALTER TABLE exams ' . implode(', ', $adds));
     } catch (Throwable $e) { /* schema errors are reported by the actual action if needed */ }
 }
@@ -105,14 +107,25 @@ case 'save_meta': {
     $shuf = isset($in['shuffle_questions']) ? (int)((string)$in['shuffle_questions']==='1') : 0;
     $start = trim((string)($in['start_at'] ?? '')) ?: null;
     $end = trim((string)($in['end_at'] ?? '')) ?: null;
+    $allowedFields = ['تجربی','ریاضی','انسانی','هنر','زبان'];
+    $allowedGrades = ['دهم','یازدهم','دوازدهم','کنکوری'];
+    $targetFields = $in['target_fields'] ?? [];
+    $targetGrades = $in['target_grades'] ?? [];
+    if (!is_array($targetFields)) $targetFields = [$targetFields];
+    if (!is_array($targetGrades)) $targetGrades = [$targetGrades];
+    $targetFields = array_values(array_intersect($allowedFields, array_map('strval', $targetFields)));
+    $targetGrades = array_values(array_intersect($allowedGrades, array_map('strval', $targetGrades)));
+    $assignAll = (empty($targetFields) && empty($targetGrades)) ? 1 : 0;
+    $targetFieldsJson = $targetFields ? json_encode($targetFields, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) : null;
+    $targetGradesJson = $targetGrades ? json_encode($targetGrades, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) : null;
 
     if ($id) {
         if (!own_exam($id,$me,$u['role'])) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'],404);
-        db()->prepare('UPDATE exams SET title=?,description=?,creation_mode=?,exam_type=?,timing_mode=?,duration_min=?,negative_marking=?,show_review=?,shuffle_questions=?,start_at=?,end_at=? WHERE id=?')
-            ->execute([$title,$desc,$mode,$etype,$timing,$dur,$neg,$rev,$shuf,$start,$end,$id]);
+        db()->prepare('UPDATE exams SET title=?,description=?,creation_mode=?,exam_type=?,timing_mode=?,duration_min=?,negative_marking=?,show_review=?,shuffle_questions=?,start_at=?,end_at=?,assign_all=?,target_fields_json=?,target_grades_json=? WHERE id=?')
+            ->execute([$title,$desc,$mode,$etype,$timing,$dur,$neg,$rev,$shuf,$start,$end,$assignAll,$targetFieldsJson,$targetGradesJson,$id]);
     } else {
-        db()->prepare('INSERT INTO exams (advisor_id,title,description,creation_mode,exam_type,timing_mode,duration_min,negative_marking,show_review,shuffle_questions,start_at,end_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-            ->execute([$me,$title,$desc,$mode,$etype,$timing,$dur,$neg,$rev,$shuf,$start,$end]);
+        db()->prepare('INSERT INTO exams (advisor_id,title,description,creation_mode,exam_type,timing_mode,duration_min,negative_marking,show_review,shuffle_questions,start_at,end_at,assign_all,target_fields_json,target_grades_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+            ->execute([$me,$title,$desc,$mode,$etype,$timing,$dur,$neg,$rev,$shuf,$start,$end,$assignAll,$targetFieldsJson,$targetGradesJson]);
         $id = (int)db()->lastInsertId();
     }
     json_out(['ok'=>true,'id'=>$id]);
@@ -154,14 +167,32 @@ case 'delete_section': {
 case 'add_question': {
     $examId = (int)($in['exam_id'] ?? 0);
     $secId  = (int)($in['section_id'] ?? 0);
+    $afterId = (int)($in['after_question_id'] ?? 0);
     if (!own_exam($examId,$me,$u['role'])) json_out(['ok'=>false,'error'=>'آزمون یافت نشد'],404);
     $secChk = db()->prepare('SELECT id FROM exam_sections WHERE id=? AND exam_id=?');
     $secChk->execute([$secId, $examId]);
     if (!$secChk->fetch()) json_out(['ok'=>false,'error'=>'بخش نامعتبر است'],422);
-    $so = (int)db()->query('SELECT COALESCE(MAX(sort_order),0)+1 FROM exam_questions WHERE section_id='.$secId)->fetchColumn();
-    $ins = db()->prepare('INSERT INTO exam_questions (exam_id,section_id,correct_opt,sort_order) VALUES (?,?,1,?)');
-    $ins->execute([$examId,$secId,$so]);
-    json_out(['ok'=>true,'id'=>(int)db()->lastInsertId()]);
+    try { db()->exec("ALTER TABLE exam_questions ADD COLUMN question_number INT UNSIGNED NULL DEFAULT NULL AFTER section_id"); } catch (Throwable $altE) {}
+
+    $so = 0; $qnum = null;
+    if ($afterId) {
+        $afterSt = db()->prepare('SELECT sort_order, question_number FROM exam_questions WHERE id=? AND exam_id=? AND section_id=? LIMIT 1');
+        $afterSt->execute([$afterId,$examId,$secId]);
+        $after = $afterSt->fetch();
+        if ($after) {
+            $so = (int)$after['sort_order'] + 1;
+            $qnum = $after['question_number'] !== null ? ((int)$after['question_number'] + 1) : $so;
+            db()->prepare('UPDATE exam_questions SET sort_order=sort_order+1 WHERE exam_id=? AND section_id=? AND sort_order>=?')->execute([$examId,$secId,$so]);
+            if ($qnum !== null) db()->prepare('UPDATE exam_questions SET question_number=question_number+1 WHERE exam_id=? AND section_id=? AND question_number IS NOT NULL AND question_number>=?')->execute([$examId,$secId,$qnum]);
+        }
+    }
+    if (!$so) {
+        $so = (int)db()->query('SELECT COALESCE(MAX(sort_order),0)+1 FROM exam_questions WHERE section_id='.$secId)->fetchColumn();
+        $qnum = $so;
+    }
+    $ins = db()->prepare('INSERT INTO exam_questions (exam_id,section_id,correct_opt,sort_order,question_number) VALUES (?,?,1,?,?)');
+    $ins->execute([$examId,$secId,$so,$qnum]);
+    json_out(['ok'=>true,'id'=>(int)db()->lastInsertId(),'question_number'=>$qnum]);
 }
 
 case 'save_question': {
@@ -235,13 +266,16 @@ case 'set_status': {
     db()->prepare('UPDATE exams SET status=? WHERE id=?')->execute([$status,$examId]);
     if ($status==='published') {
         // اعلان به دانش‌آموزان فعال
-        if ($u['role'] === 'admin') {
-            $studs = db()->query("SELECT id FROM users WHERE role='student' AND status='active'")->fetchAll();
-        } else {
-            $stStud = db()->prepare("SELECT id FROM users WHERE role='student' AND status='active' AND advisor_id=?");
-            $stStud->execute([$me]);
-            $studs = $stStud->fetchAll();
-        }
+        $tf = !empty($e['target_fields_json']) ? (json_decode((string)$e['target_fields_json'], true) ?: []) : [];
+        $tg = !empty($e['target_grades_json']) ? (json_decode((string)$e['target_grades_json'], true) ?: []) : [];
+        $where = "role='student' AND status='active'";
+        $params = [];
+        if ($u['role'] !== 'admin') { $where .= ' AND advisor_id=?'; $params[] = $me; }
+        if ($tf) { $where .= ' AND field IN (' . implode(',', array_fill(0, count($tf), '?')) . ')'; array_push($params, ...$tf); }
+        if ($tg) { $where .= ' AND grade IN (' . implode(',', array_fill(0, count($tg), '?')) . ')'; array_push($params, ...$tg); }
+        $stStud = db()->prepare("SELECT id FROM users WHERE $where");
+        $stStud->execute($params);
+        $studs = $stStud->fetchAll();
         foreach ($studs as $s) notify((int)$s['id'],'آزمون جدید منتشر شد 📝', $e['title'], 'clipboard', 'student/exams.php');
     }
     json_out(['ok'=>true,'status'=>$status]);
@@ -417,13 +451,21 @@ case 'quick_sheet_generate': {
     
     $cleanKey = normalize_answer_key($answerKey);
     $qCount = strlen($cleanKey);
-    if ($qCount === 0) json_out(['ok'=>false, 'error'=>'کلید پاسخنامه معتبر نیست (باید شامل اعداد ۱ تا ۴ باشد)'], 422);
+    $customKeys = $in['custom_keys'] ?? [];
+    if (!is_array($customKeys)) $customKeys = [];
+    $customKeys = array_values(array_filter(array_map(function($ck) {
+        $qnum = (int)($ck['question_number'] ?? 0);
+        $cor  = (int)($ck['correct_opt'] ?? 0);
+        if ($qnum < 1 || $cor < 1 || $cor > 4) return null;
+        return ['question_number'=>$qnum, 'correct_opt'=>$cor];
+    }, $customKeys)));
+    if ($qCount === 0 && empty($customKeys)) json_out(['ok'=>false, 'error'=>'کلید پاسخنامه معتبر نیست (باید شامل اعداد ۱ تا ۴ باشد)'], 422);
 
     db()->beginTransaction();
     try {
         try { db()->exec("ALTER TABLE exam_questions ADD COLUMN question_number INT UNSIGNED NULL DEFAULT NULL AFTER section_id"); } catch (Throwable $alterE) {}
         
-        $answerKeyToStore = $cleanKey;
+        $answerKeyToStore = $cleanKey ?: implode('', array_map(fn($ck) => (string)$ck['correct_opt'], $customKeys));
         db()->prepare('UPDATE exams SET creation_mode="quick_sheet", answer_key=? WHERE id=?')->execute([$answerKeyToStore, $examId]);
         if ($sheetPath && !$e['sheet_path']) {
             db()->prepare('UPDATE exams SET sheet_path=? WHERE id=?')->execute([$sheetPath, $examId]);
@@ -435,8 +477,6 @@ case 'quick_sheet_generate': {
         $secId = (int)db()->lastInsertId();
         
         $questionImage = sheet_asset_type($sheetPath) === 'image' ? $sheetPath : null;
-        $customKeys = $in['custom_keys'] ?? [];
-        if (!is_array($customKeys)) $customKeys = [];
 
         $ins = db()->prepare('INSERT INTO exam_questions (exam_id, section_id, q_text, q_image, correct_opt, sort_order, question_number) VALUES (?, ?, ?, ?, ?, ?, ?)');
         

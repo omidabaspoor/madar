@@ -106,6 +106,24 @@ function task_status_badge(array $t): string
 function advisor_students(int $advisorId, ?string $status = null, string $q = ''): array
 {
     task_status_schema_ready();
+    // خودترمیم برای نصب‌های قدیمی که upgrade_advisor_access.sql روی آن‌ها اجرا نشده است.
+    try {
+        $cols = [];
+        foreach (db()->query('SHOW COLUMNS FROM users')->fetchAll() as $c) $cols[$c['Field']] = true;
+        if (empty($cols['access_mode'])) {
+            db()->exec("ALTER TABLE users ADD COLUMN access_mode ENUM('all','restricted') NOT NULL DEFAULT 'all' AFTER status");
+        }
+        db()->exec("CREATE TABLE IF NOT EXISTS advisor_student_access (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            advisor_id INT UNSIGNED NOT NULL,
+            student_id INT UNSIGNED NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uq_access (advisor_id, student_id),
+            KEY idx_asa_advisor (advisor_id),
+            KEY idx_asa_student (student_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (Throwable $e) { /* اگر مجوز ALTER نبود، کوئری اصلی خطای قابل مشاهده می‌دهد */ }
     $score = task_score_sql('t');
     $sql = 'SELECT u.*,
             (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id) AS total_tasks,
@@ -454,8 +472,32 @@ function exam_question_count(int $examId): int {
     return (int)$st->fetchColumn();
 }
 
+function ensure_exam_target_schema(): void {
+    try {
+        $cols = [];
+        foreach (db()->query('SHOW COLUMNS FROM exams')->fetchAll() as $c) $cols[$c['Field']] = true;
+        $adds = [];
+        if (empty($cols['target_fields_json'])) $adds[] = "ADD COLUMN target_fields_json TEXT DEFAULT NULL AFTER assign_all";
+        if (empty($cols['target_grades_json'])) $adds[] = "ADD COLUMN target_grades_json TEXT DEFAULT NULL AFTER target_fields_json";
+        if ($adds) db()->exec('ALTER TABLE exams ' . implode(', ', $adds));
+    } catch (Throwable $e) { /* old installs without ALTER permission will simply behave as all */ }
+}
+
 /** آزمون‌های قابل مشاهده برای یک دانش‌آموز (منتشرشده و در بازه) */
+function student_exam_is_visible(int $examId, int $studentId): bool {
+    ensure_exam_target_schema();
+    $sql = "SELECT COUNT(*) FROM exams e JOIN users su ON su.id=?
+        WHERE e.id=? AND e.status='published'
+          AND (su.advisor_id IS NULL OR e.advisor_id=su.advisor_id OR e.advisor_id IN (SELECT id FROM users WHERE role='admin'))
+          AND (e.target_fields_json IS NULL OR e.target_fields_json='' OR (su.field IS NOT NULL AND e.target_fields_json LIKE CONCAT('%\"', su.field, '\"%')))
+          AND (e.target_grades_json IS NULL OR e.target_grades_json='' OR (su.grade IS NOT NULL AND e.target_grades_json LIKE CONCAT('%\"', su.grade, '\"%')))";
+    $st = db()->prepare($sql);
+    $st->execute([$studentId, $examId]);
+    return (int)$st->fetchColumn() > 0;
+}
+
 function student_exams(int $studentId): array {
+    ensure_exam_target_schema();
     $sql = "SELECT e.*,
         (SELECT COUNT(*) FROM exam_questions q WHERE q.exam_id=e.id) AS q_count,
         a.id AS attempt_id, a.status AS attempt_status, a.total_score
@@ -464,6 +506,8 @@ function student_exams(int $studentId): array {
         LEFT JOIN exam_attempts a ON a.exam_id=e.id AND a.student_id=su.id
         WHERE e.status='published'
           AND (su.advisor_id IS NULL OR e.advisor_id=su.advisor_id OR e.advisor_id IN (SELECT id FROM users WHERE role='admin'))
+          AND (e.target_fields_json IS NULL OR e.target_fields_json='' OR (su.field IS NOT NULL AND e.target_fields_json LIKE CONCAT('%\"', su.field, '\"%')))
+          AND (e.target_grades_json IS NULL OR e.target_grades_json='' OR (su.grade IS NOT NULL AND e.target_grades_json LIKE CONCAT('%\"', su.grade, '\"%')))
         ORDER BY e.created_at DESC";
     $st = db()->prepare($sql);
     $st->execute([$studentId]);
@@ -546,6 +590,7 @@ function exam_results(int $examId): array {
     return $st->fetchAll();
 }
 function advisor_exams(int $advisorId): array {
+    ensure_exam_target_schema();
     $st = db()->prepare("SELECT e.*,
         (SELECT COUNT(*) FROM exam_questions q WHERE q.exam_id=e.id) AS q_count,
         (SELECT COUNT(*) FROM exam_attempts a WHERE a.exam_id=e.id AND a.status='submitted') AS taken_count

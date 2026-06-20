@@ -22,7 +22,13 @@ if(!$studentId){
 }
 $student=get_user($studentId);
 if(!$student || $student['role']!=='student'){ flash('error','دانش‌آموز یافت نشد'); redirect('admin/student_reports.php'); }
-$reports=reports_for_student($studentId,$type,40);
+if (($u['role'] ?? '') === 'advisor' && (int)($student['advisor_id'] ?? 0) !== (int)$u['id']) {
+  http_response_code(403);
+  require __DIR__ . '/../403.php';
+  exit;
+}
+try { $reports=reports_for_student($studentId,$type,40); }
+catch (Throwable $e) { $reports=[]; flash('error','خطا در خواندن گزارش‌ها. اگر نصب قدیمی است، install.php را یک‌بار اجرا کنید.'); }
 $showInsight = advisor_feature_enabled((int)$u['id'], 'insight_enabled');
 panel_start('گزارش حرفه‌ای', $student['full_name'].' · '.report_type_label($type), 'admin','student_reports',['student.css']);
 ?>
@@ -51,7 +57,7 @@ panel_start('گزارش حرفه‌ای', $student['full_name'].' · '.report_ty
 
 <?php if(!$reports): ?>
 <div class="panel"><div class="empty-state"><div class="es-ico"><?= icon('chart',30) ?></div>هنوز گزارشی برای این بخش ثبت نشده</div></div>
-<?php else: foreach($reports as $r): $s=$r['snapshot']; $a=$r['advanced']; $an=$showInsight?report_build_analysis($studentId,(string)$r['report_type'],(string)$r['period_start'],(string)$r['period_end'],$s,$a):null; ?>
+<?php else: foreach($reports as $r): $s=$r['snapshot'] ?? []; $a=$r['advanced'] ?? []; $an=null; if($showInsight){ try { $an=report_build_analysis($studentId,(string)$r['report_type'],(string)$r['period_start'],(string)$r['period_end'],$s,$a); } catch (Throwable $e) { $an=null; } } ?>
 <div class="panel report-admin-card mb-4 <?= $r['status']==='submitted'?'submitted':'draft' ?>">
   <div class="panel-head between wrap gap-2">
     <div class="flex items-center gap-3">

@@ -13,6 +13,10 @@ if ($exam && $exam['advisor_id'] != $u['id'] && $u['role']!=='admin') { flash('e
 $sections = $exam ? exam_sections($examId) : [];
 $questions = $exam ? exam_questions($examId) : [];
 $subjects = all_subjects();
+$targetFields = $exam && !empty($exam['target_fields_json']) ? (json_decode((string)$exam['target_fields_json'], true) ?: []) : [];
+$targetGrades = $exam && !empty($exam['target_grades_json']) ? (json_decode((string)$exam['target_grades_json'], true) ?: []) : [];
+$targetFields = is_array($targetFields) ? $targetFields : [];
+$targetGrades = is_array($targetGrades) ? $targetGrades : [];
 
 $qBySection = [];
 foreach ($questions as $q) $qBySection[(int)$q['section_id']][] = $q;
@@ -102,6 +106,35 @@ panel_start($exam ? 'ویرایش آزمون' : 'طراحی آزمون جدید'
             </div>
           </div>
           <div class="field"><label>توضیحات کوتاه <span class="muted">(اختیاری)</span></label><input class="input" name="description" id="m_desc" value="<?= e($exam['description'] ?? '') ?>" placeholder="مثلاً ویژه‌ی جمع‌بندی نیمسال اول"></div>
+        </div>
+
+        <div class="panel exam-target-box mb-4" style="background:linear-gradient(135deg,rgba(203,172,128,.10),rgba(107,136,114,.07));border:1px solid rgba(203,172,128,.25);border-radius:var(--r-lg);padding:16px 18px">
+          <div class="between wrap gap-2 mb-3" style="align-items:center">
+            <div>
+              <b style="color:var(--gold-light);font-size:1rem"><?= icon('users',18) ?> انتشار برای چه دانش‌آموزانی؟</b>
+              <div class="muted" style="font-size:.8rem;margin-top:3px">اگر هیچ گزینه‌ای انتخاب نشود، آزمون برای همه‌ی دانش‌آموزان مجاز منتشر می‌شود. برای مثال: «ریاضی + دوازدهم + کنکوری».</div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="targetAllBtn" style="font-weight:900">انتشار برای همه</button>
+          </div>
+          <div class="grid gap-3" style="grid-template-columns:1fr 1fr">
+            <div class="field" style="margin:0">
+              <label style="font-weight:900;color:var(--text-2);margin-bottom:8px;display:block">رشته‌ها</label>
+              <div class="target-chip-wrap">
+                <?php foreach(['تجربی','ریاضی','انسانی','هنر','زبان'] as $f): ?>
+                  <label class="target-chip <?= in_array($f,$targetFields,true)?'active':'' ?>"><input type="checkbox" name="target_fields[]" value="<?= e($f) ?>" <?= in_array($f,$targetFields,true)?'checked':'' ?>><?= e($f) ?></label>
+                <?php endforeach; ?>
+              </div>
+            </div>
+            <div class="field" style="margin:0">
+              <label style="font-weight:900;color:var(--text-2);margin-bottom:8px;display:block">پایه‌ها</label>
+              <div class="target-chip-wrap">
+                <?php foreach(['دهم','یازدهم','دوازدهم','کنکوری'] as $g): ?>
+                  <label class="target-chip <?= in_array($g,$targetGrades,true)?'active':'' ?>"><input type="checkbox" name="target_grades[]" value="<?= e($g) ?>" <?= in_array($g,$targetGrades,true)?'checked':'' ?>><?= e($g) ?></label>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </div>
+          <div class="target-summary mt-3" id="targetSummary"></div>
         </div>
 
         <div class="grid gap-3 mb-4" style="grid-template-columns:1fr 1fr">
@@ -209,7 +242,12 @@ panel_start($exam ? 'ویرایش آزمون' : 'طراحی آزمون جدید'
             <h4 style="font-size:1.15rem;font-weight:900;color:var(--sage);margin-bottom:16px;display:flex;align-items:center;gap:8px">
               <?= icon('check-circle',20) ?> ۲. ورود سریع کلید پاسخنامه
             </h4>
-            <p class="muted mb-4" style="font-size:.88rem;line-height:1.7">می‌توانید کلید سوالات را به‌صورت یک‌جا (مثلاً <code>4123411...</code>) پیست کنید یا مستقیماً روی حباب‌های زیر کلیک کنید:</p>
+            <p class="muted mb-3" style="font-size:.88rem;line-height:1.7">کلیدها را یک‌جا پیست کنید یا با کارت‌های کنترلی زیر، پاسخ هر سوال را دقیق مدیریت کنید؛ امکان افزودن بین دو سوال، حذف، جابه‌جایی و تغییر شماره واقعی سوال وجود دارد.</p>
+            <div class="qkey-help-panel">
+              <div class="qkey-help-item"><b>افزودن بین سوال‌ها</b>روی «+قبل» یا «+بعد» هر کارت بزنید؛ شماره‌های بعدی خودکار جلو می‌روند.</div>
+              <div class="qkey-help-item"><b>شماره واقعی سوال</b>عدد داخل هر کارت را تغییر دهید؛ برای دفترچه‌هایی که از ۱۰۱ یا ۱۵۱ شروع می‌شوند عالی است.</div>
+              <div class="qkey-help-item"><b>کنترل خطا</b>شماره‌های تکراری قرمز می‌شوند و سوال‌های بدون پاسخ موقع ثبت هشدار می‌دهند.</div>
+            </div>
 
             <div class="field mb-4">
               <div class="between mb-1"><label style="font-size:.9rem;color:var(--text-2)">رشته‌ی پاسخنامه (اعداد ۱ تا ۴):</label><span id="keyQCountBadge" class="badge badge-gold">۰ سوال</span></div>
@@ -288,7 +326,7 @@ panel_start($exam ? 'ویرایش آزمون' : 'طراحی آزمون جدید'
           </div>
 
           <div class="mt-4 flex gap-3">
-            <button type="button" id="add10BubblesBtn" class="btn btn-ghost btn-sm" style="flex:1"><?= icon('plus',14) ?> +۱۰ سوال دیگر</button>
+            <button type="button" id="add10BubblesBtn" class="btn btn-ghost btn-sm" style="flex:1"><?= icon('plus',14) ?> افزودن ۱۰ سوال به انتها</button>
             <button type="button" id="saveQuickSheetSuiteBtn" class="btn btn-gold btn-lg" style="flex:2;font-weight:900"><?= icon('check',18) ?> ثبت نهایی و ساخت سوالات</button>
           </div>
         </div>

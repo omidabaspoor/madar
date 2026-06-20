@@ -16,7 +16,8 @@ function planner_settings_defaults(): array {
         'smart_autofill'      => '1',           // پرکردن خودکار بر اساس انتخاب‌های قبلی
         'special_reading_min' => '45',          // مدت روزخوانی پیش‌فرض واحد ویژه
         'special_exam_min'    => '50',          // مدت آزمونک پیش‌فرض واحد ویژه
-        'insight_enabled'     => '1',           // نمایش تحلیل هوشمند
+        'insight_enabled'     => '1',           // نمایش تحلیل هوشمند گزارش پیشرفته (بتا)
+        'mock_analysis_enabled'=> '1',       // تحلیل هوشمند آزمون آزمایشی/کنکور (بتا)
         'review_enabled'      => '1',           // سیستم مرور فاصله‌دار
         'web_notifications'   => '1',           // پیشنهاد اعلان وب‌اپ
         'achievements_enabled'=> '1',           // سیستم گیمیفیکیشن و دستاوردها
@@ -103,7 +104,7 @@ function save_planner_settings(int $advisorId, array $in): void {
         'smart_autofill'   => ['0','1'],
     ];
     $numeric  = ['default_duration','default_test_count','special_reading_min','special_exam_min'];
-    $checkbox = ['smart_autofill','insight_enabled','review_enabled','web_notifications','achievements_enabled','mood_logging_enabled','taraz_samurai_enabled','precision_samurai_enabled','auto_mark_missed_enabled']; // چک‌باکس‌ها: نبودشان در POST یعنی خاموش
+    $checkbox = ['smart_autofill','insight_enabled','mock_analysis_enabled','review_enabled','web_notifications','achievements_enabled','mood_logging_enabled','taraz_samurai_enabled','precision_samurai_enabled','auto_mark_missed_enabled']; // چک‌باکس‌ها: نبودشان در POST یعنی خاموش
     foreach ($allowed as $k => $def) {
         if (in_array($k, $checkbox, true)) {
             // اگر چک‌باکس تیک نخورده باشد اصلاً در POST نمی‌آید → '0'

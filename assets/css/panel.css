@@ -190,3 +190,9 @@
   .stat .v{ font-size:1.32rem; }
   .bn-item .bn-lbl{ font-size:.61rem; }
 }
+
+/* ============================================================
+   Panel shell polish pass — cleaner admin/student workspace
+   ============================================================ */
+.app-shell{background:radial-gradient(900px 520px at 78% -12%,rgba(203,172,128,.075),transparent 55%),var(--bg)}
+.sidebar{box-shadow:-12px 0 36px rgba(0,0,0,.14);scrollbar-width:thin}.sidebar .brand{border-bottom:1px solid var(--border-soft);margin-bottom:8px}.side-nav .label{margin-top:8px}.side-link svg{opacity:.9;flex-shrink:0}.side-link.active{box-shadow:inset 0 0 0 1px rgba(107,136,114,.16)}.side-foot{margin-top:12px}.content{display:flex;flex-direction:column;gap:18px}.content>.panel:first-child,.content>.between:first-child{margin-top:0}.student-grid,.exam-grid{gap:18px}.student-card,.exam-card{min-height:0}.sc-actions,.flex.gap-2.mt-4{row-gap:8px}.panel .panel{box-shadow:none}@media(min-width:861px){.app-main{display:flex;flex-direction:column}.content{flex:1}.sidebar{width:256px}.topbar{padding-inline:28px}}@media(max-width:860px){.sidebar{padding-bottom:90px}.side-link{min-height:46px}.content{gap:14px}.bottom-nav{box-shadow:0 -12px 30px rgba(0,0,0,.28)}.bn-item{min-width:0}.bn-item .bn-lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}}

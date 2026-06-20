@@ -25,6 +25,16 @@ if (!function_exists('mb_strlen')) {
     }
 }
 
+if (!function_exists('mb_strimwidth')) {
+    function mb_strimwidth($str, $start, $width, $trim_marker = '', $enc = 'UTF-8') {
+        $str = (string)$str;
+        $chars = preg_split('//u', $str, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $slice = array_slice($chars, (int)$start, max(0, (int)$width));
+        $out = implode('', $slice);
+        return count($chars) > ((int)$start + (int)$width) ? $out . (string)$trim_marker : $out;
+    }
+}
+
 /* ---------- خروجی امن ---------- */
 function e(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 

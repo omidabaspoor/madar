@@ -30,6 +30,7 @@ $secQs = $qBySection[(int)$sec['id']] ?? [];
         </div>
         <textarea class="input q-text font-bold flex-1" data-q-text rows="1" placeholder="متن دقیق سوال را بنویسید…"><?= e($q['q_text']) ?></textarea>
         <div class="q-tools flex items-center gap-1">
+          <button type="button" class="btn btn-ghost btn-sm" data-insert-question-after data-tip="افزودن سوال بعد از این" style="border-color:rgba(203,172,128,.35);color:var(--gold-light);font-weight:900">+ بین</button>
           <label class="btn btn-ghost btn-sm q-img-btn" data-tip="افزودن عکس ضمیمه"><?= icon('paperclip',16) ?><input type="file" accept="image/*" data-q-img hidden></label>
           <button type="button" class="btn btn-ghost btn-sm btn-icon" data-del-question data-tip="حذف کامل سوال" style="color:var(--danger)"><?= icon('trash',15) ?></button>
         </div>

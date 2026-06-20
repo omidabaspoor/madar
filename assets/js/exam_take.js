@@ -333,6 +333,28 @@
   if (sheetSelect) goToSheet(parseInt(sheetSelect.value || '0'));
   else if (bArea) setViewerMode(bArea.dataset.type || 'image', pdfWrap?.dataset.src || zoomImg?.getAttribute('src') || '');
 
+  // Mobile-first switcher: on phones the booklet and answer sheet become two clean tabs.
+  const samuraiLayout = document.querySelector('.exam-samurai-layout');
+  if (samuraiLayout && !document.querySelector('.mobile-exam-switch')) {
+    document.body.classList.add('samurai-exam-mobile');
+    env.classList.add('mobile-booklet-mode');
+    const sw = document.createElement('div');
+    sw.className = 'mobile-exam-switch';
+    sw.innerHTML = `<button type="button" data-mobile-exam-mode="booklet" class="active">📄 دفترچه سوالات</button><button type="button" data-mobile-exam-mode="answer">🎯 پاسخ‌برگ <span id="mobileAnsweredMini">۰/${faNum(total)}</span></button>`;
+    document.querySelector('.exam-bar')?.insertAdjacentElement('afterend', sw);
+    sw.addEventListener('click', e => {
+      const btn = e.target.closest('[data-mobile-exam-mode]'); if (!btn) return;
+      const mode = btn.dataset.mobileExamMode;
+      env.classList.toggle('mobile-booklet-mode', mode === 'booklet');
+      env.classList.toggle('mobile-answer-mode', mode === 'answer');
+      sw.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+      setTimeout(() => {
+        if (mode === 'booklet') resetViewer();
+        else document.querySelector('.bubble-rows-container')?.scrollTo({top:0, behavior:'smooth'});
+      }, 80);
+    });
+  }
+
   // Dual Bubble Sheet interaction
   env.addEventListener('click', e => {
     const bOpt = e.target.closest('.bubble-opt-btn');
@@ -594,6 +616,8 @@
     }
     const ac = document.getElementById('answeredCount');
     if(ac) ac.textContent=faNum(answered);
+    const mac = document.getElementById('mobileAnsweredMini');
+    if(mac) mac.textContent = `${faNum(answered)}/${faNum(total)}`;
   }
   refreshCounts();
 

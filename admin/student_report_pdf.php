@@ -9,6 +9,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/models.php';
 require_once __DIR__ . '/../includes/reporting.php';
 require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/../includes/icons.php';
 require_once __DIR__ . '/../includes/log.php';
 boot_session();
 require_role('student','advisor','admin');
@@ -41,6 +42,18 @@ if ($u['role'] === 'student' && $studentId !== (int)$u['id']) {
 }
 
 $student = get_user($studentId);
+if (!$student || ($student['role'] ?? '') !== 'student') {
+    flash('error','دانش‌آموز یافت نشد');
+    redirect('index.php');
+}
+
+// مشاور فقط به دانش‌آموزان خودش دسترسی داشته باشد؛ ادمین ارشد به همه دسترسی دارد.
+if ($u['role'] === 'advisor' && (int)($student['advisor_id'] ?? 0) !== (int)$u['id']) {
+    http_response_code(403);
+    require __DIR__ . '/../403.php';
+    exit;
+}
+
 $advisor = get_user((int)($student['advisor_id'] ?? 0));
 
 $s = $r['auto_snapshot_json'] ? (json_decode($r['auto_snapshot_json'], true) ?: []) : [];
@@ -53,6 +66,12 @@ $s += ['progress_percent'=>0,'full'=>0,'partial'=>0,'missed'=>0,'study_hours'=>0
 // 2. ساخت تحلیل هوشمند مَدار
 $showInsight = advisor_feature_enabled((int)($student['advisor_id'] ?? 0), 'insight_enabled');
 $analysis = $showInsight ? report_build_analysis($studentId, $type, (string)$r['period_start'], (string)$r['period_end'], $s, $a) : null;
+if ($analysis) {
+    // نسخه چاپی باید خوانا و بدون سرریز باشد؛ مهم‌ترین موارد را نگه می‌داریم.
+    $analysis['alerts'] = array_slice($analysis['alerts'] ?? [], 0, 4);
+    $analysis['recommendations'] = array_slice($analysis['recommendations'] ?? [], 0, 5);
+    $analysis['action_plan'] = array_slice($analysis['action_plan'] ?? [], 0, 3);
+}
 
 // 3. دریافت گزارش‌های دوره‌های گذشته جهت مقایسه و تحلیل روند رشد
 $stmtLt = db()->prepare("SELECT * FROM student_reports WHERE student_id = ? AND report_type = ? AND period_start <= ? ORDER BY period_start DESC LIMIT 4");
@@ -60,19 +79,36 @@ $stmtLt->execute([$studentId, $type, $r['period_start']]);
 $historyReports = $stmtLt->fetchAll();
 
 // 4. دریافت کارنامه‌های آزمون کسب‌شده در این بازه
-$stmtExams = db()->prepare("SELECT a.*, e.title, e.exam_type, e.duration_min FROM exam_attempts a JOIN exams e ON e.id = a.exam_id WHERE a.student_id = ? AND a.status = 'submitted' AND a.submitted_at BETWEEN ? AND ? ORDER BY a.total_score DESC LIMIT 10");
-$stmtExams->execute([$studentId, $r['period_start'] . ' 00:00:00', $r['period_end'] . ' 23:59:59']);
-$periodExams = $stmtExams->fetchAll();
+// این بخش‌ها باید اختیاری و مقاوم باشند؛ در بعضی نصب‌ها upgrade مربوط به آزمون/لاگ/دستاورد هنوز اجرا نشده است.
+$periodExams = [];
+try {
+    $stmtExams = db()->prepare("SELECT a.*, e.title, e.exam_type, e.duration_min FROM exam_attempts a JOIN exams e ON e.id = a.exam_id WHERE a.student_id = ? AND a.status = 'submitted' AND a.submitted_at BETWEEN ? AND ? ORDER BY a.total_score DESC LIMIT 10");
+    $stmtExams->execute([$studentId, $r['period_start'] . ' 00:00:00', $r['period_end'] . ' 23:59:59']);
+    $periodExams = $stmtExams->fetchAll();
+} catch (Throwable $e) {
+    $periodExams = [];
+}
 
 // 5. دریافت لاگ رخدادها و ریزفعالیت‌های ثبت‌شده در این بازه
-$stmtLogs = db()->prepare("SELECT l.*, u.full_name FROM activity_logs l JOIN users u ON u.id = l.user_id WHERE l.user_id = ? AND l.created_at BETWEEN ? AND ? ORDER BY l.created_at DESC LIMIT 30");
-$stmtLogs->execute([$studentId, $r['period_start'] . ' 00:00:00', $r['period_end'] . ' 23:59:59']);
-$periodLogs = $stmtLogs->fetchAll();
+$periodLogs = [];
+try {
+    $stmtLogs = db()->prepare("SELECT l.*, u.full_name FROM activity_logs l JOIN users u ON u.id = l.user_id WHERE l.user_id = ? AND l.created_at BETWEEN ? AND ? ORDER BY l.created_at DESC LIMIT 30");
+    $stmtLogs->execute([$studentId, $r['period_start'] . ' 00:00:00', $r['period_end'] . ' 23:59:59']);
+    $periodLogs = $stmtLogs->fetchAll();
+} catch (Throwable $e) {
+    $periodLogs = [];
+}
 
 // 6. دریافت دستاوردها و نشان‌های کسب‌شده
-$stmtAchs = db()->prepare("SELECT sa.*, a.title, a.icon, a.condition_type FROM student_achievements sa JOIN achievements a ON a.id = sa.achievement_id WHERE sa.student_id = ? ORDER BY sa.awarded_at DESC LIMIT 8");
-$stmtAchs->execute([$studentId]);
-$periodAchs = $stmtAchs->fetchAll();
+$periodAchs = [];
+try {
+    // نام ستون درست در schema اصلی و upgrade_achievements برابر earned_at است؛ برای سازگاری با قالب، آن را awarded_at هم alias می‌کنیم.
+    $stmtAchs = db()->prepare("SELECT sa.*, sa.earned_at AS awarded_at, a.title, a.icon, a.condition_type FROM student_achievements sa JOIN achievements a ON a.id = sa.achievement_id WHERE sa.student_id = ? ORDER BY sa.earned_at DESC LIMIT 8");
+    $stmtAchs->execute([$studentId]);
+    $periodAchs = $stmtAchs->fetchAll();
+} catch (Throwable $e) {
+    $periodAchs = [];
+}
 
 $template = local_image_data_uri('assets/img/plan-pdf-template.png');
 $pdfLogo  = local_image_data_uri('assets/img/logo.png');
@@ -85,9 +121,10 @@ $pdfLogo  = local_image_data_uri('assets/img/logo.png');
 <title>گزارش پیشرفته تحصیلی · <?= e($student['full_name']) ?></title>
 <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
 <style>
-@font-face{font-family:Vazirmatn;src:local('Vazirmatn');font-display:swap}
-@font-face{font-family:MadarPDF;src:url('../assets/fonts/DejaVuSans.ttf') format('truetype');font-weight:400}
-@font-face{font-family:MadarPDF;src:url('../assets/fonts/DejaVuSans-Bold.ttf') format('truetype');font-weight:800}
+@font-face{font-family:Vazirmatn;src:local('Vazirmatn'),url('../assets/fonts/Vazirmatn.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:MadarPDF;src:url('../assets/fonts/Vazirmatn.woff2') format('woff2'),url('../assets/fonts/DejaVuSans.ttf') format('truetype');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:MadarFallback;src:url('../assets/fonts/DejaVuSans.ttf') format('truetype');font-weight:400}
+@font-face{font-family:MadarFallback;src:url('../assets/fonts/DejaVuSans-Bold.ttf') format('truetype');font-weight:800}
 
 :root {
   --ink: #14211b; --muted: #627169; --line: #dfe7df; --paper: #fcfdf9;
@@ -127,9 +164,9 @@ body {
   box-shadow: 0 24px 70px rgba(0,0,0,0.4); border-radius: 20px;
 }
 .page:last-of-type { page-break-after: auto; break-after: auto; }
-.tpl { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -5; }
+.tpl { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; opacity:.22; pointer-events:none; }
 .page::after {
-  content: 'مَدار'; position: absolute; left: 14mm; bottom: 21mm; z-index: -2;
+  content: 'مَدار'; position: absolute; left: 14mm; bottom: 21mm; z-index: 1;
   color: rgba(32,48,40,0.04); font-size: 34mm; font-weight: 1000;
   transform: rotate(-18deg); letter-spacing: -.08em; pointer-events: none;
 }
@@ -252,25 +289,135 @@ body {
 .ach-card b { font-size: 13px; color: #9a761e; display: block; margin-top: 4px; font-weight: 900; }
 
 @media print {
-  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  html, body { background: #fff !important; color: #000 !important; width: 100%; }
-  .screen-actions { display: none !important; }
-  @page { size: A4 portrait; margin: 10mm; }
-  .page {
-    margin: 0 !important; width: 100% !important; min-height: 0 !important; height: auto !important;
-    box-shadow: none !important; border-radius: 0 !important;
-    border: none !important; page-break-after: always !important; break-after: page !important;
-    overflow: visible !important;
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-shadow: none !important; }
+  @page { size: A4 portrait; margin: 0; }
+  html, body {
+    margin: 0 !important; padding: 0 !important; width: 210mm !important;
+    background: #fff !important; color: #172a21 !important; overflow: visible !important;
+    font-family: Vazirmatn, MadarPDF, MadarFallback, Tahoma, sans-serif !important;
+    font-feature-settings: "ss01" 1;
   }
-  .inner { padding: 5mm 0 !important; }
-  .tpl { display: none !important; }
+  .screen-actions { display: none !important; }
+  .page {
+    width: 210mm !important; height: 297mm !important; min-height: 297mm !important;
+    margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important;
+    overflow: hidden !important; background: #fbfaf4 !important;
+    page-break-after: always !important; break-after: page !important; page-break-inside: avoid !important; break-inside: avoid-page !important;
+  }
+  .page:last-of-type { page-break-after: auto !important; break-after: auto !important; }
+  .page::before {
+    content: '' !important; position: absolute !important; inset: 5.5mm !important; z-index: 1 !important;
+    border: .45mm solid rgba(178,148,95,.42) !important; border-radius: 7mm !important;
+    box-shadow: inset 0 0 0 .35mm rgba(107,136,114,.18) !important; pointer-events: none !important;
+  }
+  .tpl {
+    display: block !important; position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important;
+    object-fit: cover !important; z-index: 0 !important; opacity: .30 !important; filter: saturate(1.08) contrast(1.02) !important;
+  }
+  .inner {
+    position: relative !important; z-index: 2 !important;
+    height: 297mm !important; min-height: 0 !important; padding: 9.5mm 10.5mm 8.5mm !important;
+    display: flex !important; flex-direction: column !important; overflow: hidden !important;
+  }
+  .page::after { font-size: 24mm !important; left: 12mm !important; bottom: 14mm !important; z-index: 1 !important; color: rgba(32,48,40,.045) !important; }
+
+  .top {
+    margin-bottom: 4mm !important; padding: 3mm 4mm 3mm !important;
+    background: linear-gradient(135deg, rgba(23,42,33,.96), rgba(46,72,58,.92)) !important;
+    border: .35mm solid rgba(203,172,128,.55) !important; border-radius: 5mm !important;
+    color: #fff !important;
+  }
+  .logo { width: 38px !important; height: 38px !important; border-radius: 12px !important; border-color: #e0c595 !important; background:#fff !important; }
+  .brand { gap: 9px !important; }
+  .brand b { font-size: 18px !important; color:#fff !important; letter-spacing:-.03em !important; }
+  .brand small { color:#e0c595 !important; }
+  .brand small, .top-meta { font-size: 9.5px !important; line-height: 1.45 !important; }
+  .top-meta { color:#eef4ef !important; }
+
+  .report-hero { gap: 8px !important; margin-bottom: 3.5mm !important; }
+  .card {
+    padding: 10px 12px !important; border-radius: 4.2mm !important;
+    background: rgba(255,255,255,.82) !important; border: .25mm solid rgba(107,136,114,.28) !important;
+    backdrop-filter: none !important;
+  }
+  .hero { background: linear-gradient(135deg, rgba(255,255,255,.92), rgba(249,246,235,.86)) !important; border-right: 1.1mm solid #b2945f !important; }
+  .hero h1 { font-size: 19px !important; line-height: 1.25 !important; margin-bottom: 2px !important; color:#172a21 !important; letter-spacing:-.03em !important; }
+  .hero p, .hero div { font-size: 10.5px !important; line-height: 1.55 !important; }
+  .score-card { background: linear-gradient(145deg, #132a20, #6b8872) !important; border: .45mm solid #d8bd86 !important; }
+  .score-card .v { font-size: 29px !important; color:#f4d790 !important; text-shadow:0 1px 0 rgba(0,0,0,.22) !important; }
+  .score-card .k, .score-card .sub { font-size: 9px !important; color:#eef4ef !important; }
+
+  .report-meta-box {
+    margin-bottom: 4mm !important; padding: 8px 12px !important; border-radius: 3.5mm !important; font-size: 10.5px !important; gap: 8px !important;
+    background: linear-gradient(135deg, #172a21, #243f32) !important; border: .35mm solid #d4b77b !important;
+  }
+  .report-meta-box .status-badge { font-size: 10px !important; padding: 2px 9px !important; }
+  .stats-matrix { gap: 6px !important; margin-bottom: 4mm !important; }
+  .stat-box {
+    padding: 8px !important; border-radius: 3.4mm !important;
+    background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(250,247,238,.90)) !important;
+    border-color: rgba(178,148,95,.28) !important;
+  }
+  .stat-box .k { font-size: 9px !important; color:#52665b !important; }
+  .stat-box .v { font-size: 20px !important; }
+
+  .insight-vip-suite {
+    padding: 11px 13px !important; margin-bottom: 0 !important; border-radius: 4mm !important;
+    background: linear-gradient(135deg, rgba(255,252,244,.96), rgba(255,246,218,.92)) !important;
+    border: .45mm solid #c8a76a !important;
+  }
+  .insight-header { padding-bottom: 7px !important; margin-bottom: 7px !important; gap: 8px !important; }
+  .insight-score-badge { width: 42px !important; height: 42px !important; font-size: 16px !important; background:#172a21 !important; color:#f4d790 !important; }
+  .insight-header h3 { font-size: 14px !important; color:#172a21 !important; }
+  .status-pill { font-size: 10px !important; padding: 3px 9px !important; background:#b2945f !important; color:#fff !important; }
+  .insight-summary { font-size: 10.8px !important; line-height: 1.55 !important; margin-bottom: 8px !important; }
+  .sub-scores-grid { gap: 5px !important; margin-bottom: 8px !important; }
+  .sub-score-cell { padding: 5px 7px !important; border-radius: 8px !important; font-size: 9.6px !important; }
+  .sub-score-cell b { font-size: 10px !important; }
+  .alerts-box { padding: 7px 9px !important; margin-bottom: 7px !important; border-radius: 8px !important; }
+  .alerts-box b, .alerts-box li, .recs-list, .recs-list li { font-size: 10px !important; line-height: 1.55 !important; }
+  .recs-list { margin-right: 14px !important; }
+
+  .section-title {
+    font-size: 13.5px !important; margin: 4mm 0 2.5mm !important; padding: 2mm 3mm !important;
+    border-bottom: 0 !important; border-radius: 3.5mm !important;
+    background: linear-gradient(135deg, rgba(23,42,33,.94), rgba(107,136,114,.86)) !important;
+    color:#fff !important;
+  }
+  .section-title .badge { background: rgba(255,255,255,.18) !important; color:#fff !important; border: .2mm solid rgba(255,255,255,.25) !important; }
+  .trend-grid, .behavioral-matrix, .reflections-grid, .ach-grid { gap: 7px !important; margin-bottom: 4mm !important; }
+  .trend-card { padding: 8px !important; border-radius: 3.5mm !important; background: rgba(255,255,255,.88) !important; border-color: rgba(178,148,95,.30) !important; }
+  .trend-card .t-date, .trend-card .t-meta { font-size: 9px !important; }
+  .trend-card .t-pct { font-size: 18px !important; color:#6b8872 !important; }
+  .table-card, .subjects-table-card { border-radius: 3.8mm !important; margin-bottom: 4mm !important; overflow: hidden !important; border-color: rgba(178,148,95,.32) !important; }
+  .tbl th { font-size: 10px !important; padding: 7px 8px !important; background: linear-gradient(135deg,#172a21,#2f5341) !important; color:#fff !important; }
+  .tbl td { font-size: 10px !important; padding: 6px 8px !important; line-height: 1.45 !important; background: rgba(255,255,255,.78) !important; }
+  .tbl, .tbl * { page-break-inside: avoid !important; break-inside: avoid !important; }
+
+  .beh-box { padding: 10px !important; border-radius: 10px !important; }
+  .beh-box h4 { font-size: 11.5px !important; margin-bottom: 5px !important; padding-bottom: 4px !important; }
+  .beh-row { font-size: 10px !important; padding: 3px 0 !important; }
+  .beh-row b { font-size: 10px !important; }
+  .ref-card { padding: 9px 11px !important; border-radius: 10px !important; border-right-width: 3px !important; }
+  .ref-card h5 { font-size: 10.5px !important; margin-bottom: 3px !important; }
+  .ref-card p { font-size: 10px !important; line-height: 1.55 !important; }
+  .ach-card { padding: 7px !important; border-radius: 10px !important; }
+  .ach-card b { font-size: 10px !important; }
+
+  .logs-page .inner { padding: 8mm 8mm 7mm !important; }
+  .logs-page .tbl th { font-size: 8.5px !important; padding: 5px 6px !important; }
+  .logs-page .tbl td { font-size: 8.5px !important; padding: 4px 6px !important; line-height: 1.32 !important; }
+
+  a { color: inherit !important; text-decoration: none !important; }
 }
 </style>
 <script>
 function printReport() {
+    document.body.classList.add('printing');
     const imgs = [...document.images].map(i => i.complete ? Promise.resolve() : new Promise(r => { i.onload = i.onerror = r; }));
-    Promise.all(imgs).then(() => setTimeout(() => window.print(), 200));
+    Promise.all(imgs).then(() => setTimeout(() => window.print(), 250));
 }
+window.addEventListener('afterprint', () => document.body.classList.remove('printing'));
 </script>
 </head>
 <body>
@@ -279,7 +426,7 @@ function printReport() {
   <button class="btn flex items-center gap-2" onclick="printReport()">
     <span>🖨️ چاپ / ذخیره PDF گزارش پیشرفته و تحلیل مَدار</span>
   </button>
-  <a class="btn ghost" href="<?= url($u['role']==='student'?'student/reports.php':'admin/student_reports.php?student='.$studentId) ?>">بازگشت به پنل گزارش‌ها</a>
+  <a class="btn ghost" href="<?= url($u['role']==='student' ? ('student/reports.php?type=' . $type) : ('admin/reports.php?student=' . $studentId)) ?>">بازگشت به گزارش‌ها</a>
   <span class="hint">قالب چاپی هوشمند مَدار · معماری چندصفحه‌ای و ضدتداخل چاپی</span>
 </div>
 
@@ -358,7 +505,7 @@ function printReport() {
           <div class="insight-score-badge"><?= fa_num($analysis['overall']) ?>٪</div>
           <div>
             <div style="font-size: 11px; color: var(--gold); font-weight: 900;">شاخص بازدهی و کیفیت مطالعاتی</div>
-            <h3 style="font-size: 19px; font-weight: 900; color: var(--dark); margin: 0;">تحلیل هوشمند مَدار (Madar AI Insight)</h3>
+            <h3 style="font-size: 19px; font-weight: 900; color: var(--dark); margin: 0;">تحلیل هوشمند مَدار (Madar AI Insight) · بتا</h3>
           </div>
         </div>
         <span class="status-pill"><?= e($analysis['overall_label']) ?></span>
@@ -659,7 +806,7 @@ function printReport() {
 
 <!-- ================= PAGE 5+: RECENT ACTIVITY LOGS ================= -->
 <?php if (!empty($periodLogs)): ?>
-<section class="page">
+<section class="page logs-page">
   <img class="tpl" src="<?= $template ?>" alt="">
   <div class="inner">
     <header class="top" style="margin-bottom: 6mm;">

@@ -20,7 +20,10 @@ panel_start('آزمون‌ها', 'طراحی و مدیریت آزمون‌ها',
 <div class="exam-grid">
   <?php foreach ($exams as $e):
     $stColor = ['draft'=>'badge-gold','published'=>'badge-sage','closed'=>'badge']['' . $e['status']];
-    $stText  = ['draft'=>'پیش‌نویس','published'=>'منتشر شده','closed'=>'بسته‌شده'][$e['status']]; ?>
+    $stText  = ['draft'=>'پیش‌نویس','published'=>'منتشر شده','closed'=>'بسته‌شده'][$e['status']];
+    $tf = !empty($e['target_fields_json']) ? (json_decode((string)$e['target_fields_json'], true) ?: []) : [];
+    $tg = !empty($e['target_grades_json']) ? (json_decode((string)$e['target_grades_json'], true) ?: []) : [];
+    $targetText = (!$tf && !$tg) ? 'همه دانش‌آموزان' : (($tf ? 'رشته: '.implode('، ',$tf) : 'همه رشته‌ها') . ' · ' . ($tg ? 'پایه: '.implode('، ',$tg) : 'همه پایه‌ها')); ?>
   <div class="panel card-glow exam-card reveal">
     <div class="between" style="align-items:flex-start">
       <div style="flex:1;min-width:0">
@@ -37,6 +40,7 @@ panel_start('آزمون‌ها', 'طراحی و مدیریت آزمون‌ها',
       <span class="badge" style="font-size:.72rem"><?= icon('list',12) ?> <?= fa_num($e['q_count']) ?> سوال</span>
       <span class="badge" style="font-size:.72rem"><?= icon('clock',12) ?> <?= fa_num($e['duration_min']) ?> دقیقه</span>
       <span class="badge" style="font-size:.72rem"><?= icon('users',12) ?> <?= fa_num($e['taken_count']) ?> شرکت‌کننده</span>
+      <span class="badge badge-sage" style="font-size:.72rem" title="<?= e($targetText) ?>"><?= icon('target',12) ?> <?= e($targetText) ?></span>
     </div>
     <div class="flex gap-2 mt-4">
       <a href="<?= url('admin/exam_builder.php?id='.(int)$e['id']) ?>" class="btn btn-gold btn-sm" style="flex:1"><?= icon('edit',15) ?> ویرایش</a>

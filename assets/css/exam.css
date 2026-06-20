@@ -327,3 +327,165 @@
   .booklet-viewer-panel{ height:56dvh !important; min-height:300px !important; }
   .bubble-sheet-panel{ min-height:44dvh !important; }
 }
+
+/* ============================================================
+   Mobile Samurai Exam UX — booklet/answer switcher for phones
+   ============================================================ */
+.mobile-exam-switch{ display:none; }
+@media(max-width:760px){
+  body:has(.exam-samurai-layout), body.samurai-exam-mobile{ overflow:hidden; }
+  .exam-env{ height:100dvh; overflow:hidden; }
+  .exam-bar{
+    position:relative !important;
+    z-index:90 !important;
+    padding:8px 10px !important;
+    gap:8px !important;
+    align-items:center !important;
+    background:rgba(12,21,18,.96) !important;
+  }
+  .exam-bar-info{ flex:1 1 100%; gap:7px !important; align-items:center !important; }
+  .exam-bar-info > a[href*="exam_pdf"]{ display:none !important; }
+  .exam-bar-info > a[href*="student/exams"]{ min-height:34px; padding:0 10px !important; font-size:.78rem; }
+  .eb-title{ order:3; width:100%; max-width:100% !important; font-size:.92rem !important; line-height:1.35; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--gold-light) !important; }
+  .eb-sub{ font-size:.72rem !important; padding:4px 8px !important; }
+  .exam-bar > .flex:last-child{ width:100%; justify-content:space-between; gap:8px !important; }
+  .exam-timer{ min-height:34px; padding:5px 10px !important; font-size:.88rem !important; }
+  #finishBtn{ min-height:38px; flex:1; padding:0 12px !important; font-size:.84rem; }
+
+  .mobile-exam-switch{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    position:relative;
+    z-index:85;
+    padding:8px 10px;
+    background:linear-gradient(180deg,rgba(12,21,18,.98),rgba(12,21,18,.88));
+    border-bottom:1px solid var(--border-soft);
+  }
+  .mobile-exam-switch button{
+    min-height:42px;
+    border:1px solid var(--border-soft);
+    border-radius:14px;
+    background:var(--surface-2);
+    color:var(--text-2);
+    font:inherit;
+    font-size:.86rem;
+    font-weight:1000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
+  }
+  .mobile-exam-switch button.active{
+    background:linear-gradient(135deg,var(--gold-light),var(--gold));
+    border-color:var(--gold-light);
+    color:#171006;
+    box-shadow:0 8px 24px rgba(203,172,128,.18);
+  }
+
+  .exam-samurai-layout{
+    display:block !important;
+    height:calc(100dvh - 146px) !important;
+    min-height:0 !important;
+    padding:8px !important;
+    overflow:hidden !important;
+  }
+  .booklet-viewer-panel,
+  .bubble-sheet-panel{
+    height:100% !important;
+    min-height:0 !important;
+    max-height:none !important;
+    border-radius:18px !important;
+    overflow:hidden !important;
+    box-shadow:0 12px 38px rgba(0,0,0,.34) !important;
+  }
+  .exam-env.mobile-booklet-mode .booklet-viewer-panel{ display:flex !important; }
+  .exam-env.mobile-booklet-mode .bubble-sheet-panel{ display:none !important; }
+  .exam-env.mobile-answer-mode .booklet-viewer-panel{ display:none !important; }
+  .exam-env.mobile-answer-mode .bubble-sheet-panel{ display:flex !important; }
+
+  .booklet-toolbar{
+    flex:0 0 auto;
+    padding:8px !important;
+    gap:7px !important;
+    align-items:center !important;
+  }
+  #bookletTitleBadge{ font-size:.72rem !important; padding:5px 8px !important; }
+  #bookletHint{ display:none !important; }
+  #imageZoomControls,
+  #pdfPageControls,
+  .booklet-pages-nav{
+    width:auto !important;
+    flex:1 1 auto;
+    justify-content:center;
+    min-height:34px;
+  }
+  .booklet-pages-nav .select{ max-width:86px; }
+  #zoomLevelText{ width:40px !important; font-size:.78rem !important; }
+  .booklet-scroll-area{
+    flex:1 1 auto !important;
+    height:auto !important;
+    min-height:0 !important;
+    padding:0 !important;
+    background:#020403 !important;
+    touch-action:none !important;
+  }
+  #bookletImg{
+    border-radius:8px !important;
+    box-shadow:0 8px 26px rgba(0,0,0,.75) !important;
+  }
+  #bookletPdfCanvas{ border-radius:8px !important; }
+  .booklet-pdf-fallback{ left:10px !important; right:10px !important; bottom:10px !important; }
+
+  .bubble-sheet-panel .panel-head{
+    flex:0 0 auto;
+    padding:10px 12px !important;
+  }
+  .bubble-sheet-panel .panel-head b{ font-size:.95rem !important; }
+  .bubble-sheet-panel .panel-head .muted{ display:none; }
+  .bubble-rows-container{
+    flex:1 1 auto !important;
+    max-height:none !important;
+    padding:10px !important;
+    gap:9px !important;
+    direction:rtl !important;
+    overscroll-behavior:contain;
+  }
+  .bubble-row-item{
+    direction:ltr !important;
+    display:grid !important;
+    grid-template-columns:76px 1fr 38px !important;
+    align-items:center !important;
+    gap:8px !important;
+    padding:10px !important;
+    border-radius:16px !important;
+    background:linear-gradient(135deg,rgba(255,255,255,.035),var(--surface-2)) !important;
+  }
+  .bubble-row-item [style*="width:40px"]{ width:38px !important; font-size:.92rem !important; }
+  .bubble-options-group{
+    width:100%;
+    display:grid !important;
+    grid-template-columns:repeat(4,1fr);
+    gap:7px !important;
+  }
+  .bubble-opt-btn{
+    width:100% !important;
+    height:42px !important;
+    border-radius:14px !important;
+    font-size:1rem !important;
+  }
+  .q-bookmark-btn,.q-clear-btn{ width:34px !important; height:34px !important; border-radius:11px !important; }
+  .bubble-sheet-panel > div:last-child{ flex:0 0 auto; padding:10px 12px !important; }
+  #finishSmartExamBtn{ min-height:46px; padding:10px !important; font-size:.95rem !important; }
+
+  .submit-summary{ gap:8px; }
+  .submit-summary .ss-item{ padding:10px 6px; }
+}
+
+@media(max-width:380px){
+  .exam-samurai-layout{ height:calc(100dvh - 154px) !important; padding:6px !important; }
+  .mobile-exam-switch button{ min-height:38px; font-size:.80rem; }
+  .bubble-row-item{ grid-template-columns:66px 1fr 34px !important; gap:6px !important; padding:8px !important; }
+  .bubble-opt-btn{ height:38px !important; border-radius:12px !important; }
+  .q-bookmark-btn,.q-clear-btn{ width:30px !important; height:30px !important; }
+}
