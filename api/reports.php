@@ -12,6 +12,13 @@ try {
         require_role('student');
         $type = in_array($in['report_type'] ?? 'daily', ['daily','weekly','monthly'], true) ? $in['report_type'] : 'daily';
         $date = (string)($in['date'] ?? 'now');
+        
+        // Locking daily reports of past days
+        [$start, $end] = report_period($type, $date);
+        if ($type === 'daily' && $start < date('Y-m-d')) {
+            json_out(['ok'=>false, 'error'=>'مهلت ثبت این گزارش به پایان رسیده است و قفل شده است.'], 400);
+        }
+        
         $advanced = is_array($in['advanced'] ?? null) ? $in['advanced'] : [];
         $r = report_submit((int)$u['id'], $type, $date, $advanced);
         notify((int)$u['advisor_id'], 'گزارش جدید دانش‌آموز ثبت شد', $u['full_name'].' گزارش '.report_type_label($type).' را ارسال کرد.', 'chart', 'admin/student_reports.php?student='.(int)$u['id'].'&type='.$type);

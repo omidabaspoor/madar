@@ -78,19 +78,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($password !== '') {
                     $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
                     $st = db()->prepare("
-                        UPDATE users 
-                        SET full_name=?, username=?, password_hash=?, email=?, phone=?, field=?, access_mode=? 
-                        WHERE id=? AND role='advisor'
-                    ");
-                    $st->execute([$full_name, $username, $hash, $email, $phone, $field, $access_mode, $id]);
-                } else {
-                    $st = db()->prepare("
-                        UPDATE users 
-                        SET full_name=?, username=?, email=?, phone=?, field=?, access_mode=? 
-                        WHERE id=? AND role='advisor'
-                    ");
-                    $st->execute([$full_name, $username, $email, $phone, $field, $access_mode, $id]);
-                }
+                    UPDATE users 
+                    SET full_name=?, username=?, password_hash=?, email=?, phone=?, field=?, access_mode=? 
+                    WHERE id=? AND role IN ('admin', 'advisor')
+                ");
+                $st->execute([$full_name, $username, $hash, $email, $phone, $field, $access_mode, $id]);
+            } else {
+                $st = db()->prepare("
+                    UPDATE users 
+                    SET full_name=?, username=?, email=?, phone=?, field=?, access_mode=? 
+                    WHERE id=? AND role IN ('admin', 'advisor')
+                ");
+                $st->execute([$full_name, $username, $email, $phone, $field, $access_mode, $id]);
+            }
                 log_activity($adminId, 'ویرایش مشخصات مشاور', 'user', $id, [
                     'full_name' => $full_name, 'username' => $username, 'field' => $field, 'mode' => $access_mode === 'all' ? 'کامل' : 'محدود'
                 ]);
@@ -105,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'toggle_status') {
         $id = (int)($_POST['id'] ?? 0);
         $status = $_POST['status'] ?? 'active';
-        if ($id && in_array($status, ['active','suspended'])) {
+        if ($id && $id !== $adminId && in_array($status, ['active','suspended'])) {
             db()->prepare("UPDATE users SET status = ? WHERE id = ? AND role = 'advisor'")->execute([$status, $id]);
             log_activity($adminId, $status === 'active' ? 'فعال‌سازی حساب مشاور' : 'مسدودسازی حساب مشاور', 'user', $id, ['وضعیت' => $status === 'active' ? 'فعال' : 'مسدود']);
             $msg = 'وضعیت حساب مشاور به‌روزرسانی شد.';
@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
         $mode = $_POST['mode'] ?? 'all';
         if ($id && in_array($mode, ['all','restricted'])) {
-            db()->prepare("UPDATE users SET access_mode = ? WHERE id = ? AND role = 'advisor'")->execute([$mode, $id]);
+            db()->prepare("UPDATE users SET access_mode = ? WHERE id = ? AND role IN ('admin', 'advisor')")->execute([$mode, $id]);
             log_activity($adminId, 'تغییر سطح دسترسی مشاور', 'user', $id, ['سطح دسترسی' => $mode === 'all' ? 'کامل (کل سامانه)' : 'محدود (دانش‌آموزان اختصاصی)']);
             $msg = 'سطح دسترسی مشاور به‌روزرسانی شد.';
         }
@@ -163,13 +163,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// دریافت لیست تمام مشاوران
+// دریافت لیست تمام مشاوران و مدیران
 $advisors = db()->query("
-    SELECT u.id, u.full_name, u.username, u.email, u.phone, u.field, u.status, u.access_mode, u.created_at,
+    SELECT u.id, u.full_name, u.username, u.email, u.phone, u.field, u.status, u.access_mode, u.role, u.created_at,
            (SELECT COUNT(*) FROM users WHERE (advisor_id = u.id OR id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id = u.id)) AND role = 'student') AS student_count
     FROM users u 
-    WHERE u.role = 'advisor' 
-    ORDER BY u.created_at DESC
+    WHERE u.role IN ('admin', 'advisor') 
+    ORDER BY FIELD(u.role, 'admin', 'advisor'), u.created_at DESC
 ")->fetchAll();
 
 // دریافت لیست دانش‌آموزان جهت فرم تخصیص
@@ -484,6 +484,7 @@ panel_start('مدیریت حرفه‌ای مشاوران', 'نظارت کلان 
                 </a>
 
                 <!-- تغییر وضعیت -->
+                <?php if ($adv['id'] !== $adminId): ?>
                 <form method="post" style="display: inline;">
                   <input type="hidden" name="action" value="toggle_status">
                   <input type="hidden" name="id" value="<?= $adv['id'] ?>">
@@ -493,6 +494,7 @@ panel_start('مدیریت حرفه‌ای مشاوران', 'نظارت کلان 
                     <?= $adv['status'] === 'active' ? icon('lock', 18) : icon('unlock', 18) ?>
                   </button>
                 </form>
+                <?php endif; ?>
 
                 <!-- حذف مشاور -->
                 <?php if ($adv['id'] !== $adminId): ?>

@@ -21,7 +21,33 @@ foreach ($weekChart as $w) { $chartData[(int)$w['day_index']] = ['total'=>(int)$
 $maxBar = max(1, max(array_map(fn($c)=>$c['total'], $chartData)));
 
 panel_start('داشبورد', 'سلام ' . explode(' ', (string)$u['full_name'])[0] . '، خلاصه‌ی امروز', 'admin', 'dashboard');
+
+require_once __DIR__ . '/../includes/meetings.php';
+meetings_schema_ready();
+$todayMeetings = [];
+try {
+    $todayMeetings = db()->query('SELECT s.*, u.full_name student_name FROM consultation_sessions s JOIN users u ON u.id=s.student_id WHERE s.advisor_id='.(int)$u['id'].' AND s.session_date="'.date('Y-m-d').'" AND s.status="scheduled"')->fetchAll();
+} catch (Throwable $e) {
+    error_log($e->getMessage());
+}
 ?>
+
+<?php foreach($todayMeetings as $tm): ?>
+<div class="panel alert-pulse" style="background: linear-gradient(135deg, #1c2823, #0c1512); border: 2px solid var(--gold); border-radius: 18px; padding: 18px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 0 20px rgba(178,148,95,0.15); animation: pulse Glow 2s infinite alternate;">
+  <div style="display: flex; align-items: center; gap: 14px;">
+    <div style="background: rgba(178, 148, 95, 0.15); color: var(--gold-light); width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 1.3rem;">
+      🔔
+    </div>
+    <div>
+      <span style="font-size: 11px; color: var(--gold-light); font-weight: 900; text-transform: uppercase;">هشدار زنگ جلسه امروز 📅</span>
+      <h3 style="font-size: 15px; font-weight: 900; color: var(--text-1); margin-top: 3px;">جلسه با: «<?= e($tm['student_name']) ?>»</h3>
+      <p class="muted" style="font-size: 12.5px; margin-top: 2px;">موضوع: <b><?= e($tm['title']) ?></b> · امروز <?= $tm['session_time'] ? ('ساعت ' . fa_num(substr((string)$tm['session_time'], 0, 5))) : 'ساعت توافقی' ?> برگزار خواهد شد.</p>
+    </div>
+  </div>
+  <a href="<?= url('admin/schedule_meeting.php') ?>" class="btn btn-gold btn-sm" style="font-weight: 900;">مدیریت جلسات</a>
+</div>
+<?php endforeach; ?>
+
 <!-- stat cards -->
 <div class="stat-cards">
   <div class="panel stat reveal in"><span class="icon-tile sage"><?= icon('users',26) ?></span><div><div class="v"><?= fa_num($stats['total']) ?></div><div class="k">کل دانش‌آموزان</div></div></div>

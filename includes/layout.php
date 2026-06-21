@@ -15,10 +15,27 @@ function page_head(string $title, string $desc = '', array $extraCss = []): void
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title><?= e($full) ?></title>
   <meta name="description" content="<?= e($desc) ?>">
+  <meta name="keywords" content="برنامه ریزی کنکور, تسک منیجر کنکور, مَدار, دکتر سجاد صیادی, مشاور کنکور, برنامه ریزی هفتگی, آزمون آنلاین کنکور, Spaced Repetition">
+  <meta name="author" content="دکتر سجاد صیادی">
   <meta name="theme-color" content="#0c1512">
   <meta property="og:title" content="<?= e($full) ?>">
   <meta property="og:description" content="<?= e($desc) ?>">
   <meta property="og:type" content="website">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "مَدار · Madar Study OS",
+    "url": "<?= url('') ?>",
+    "description": "سامانه هوشمند برنامه‌ریزی هفتگی، تسک منیجر و تحلیل رفتاری آزمون‌های کنکور زیر نظر دکتر سجاد صیادی",
+    "applicationCategory": "EducationalApplication",
+    "operatingSystem": "All",
+    "creator": {
+      "@type": "Person",
+      "name": "دکتر سجاد صیادی"
+    }
+  }
+  </script>
   <link rel="icon" href="<?= url('favicon.ico') ?>" sizes="any">
   <link rel="icon" href="<?= asset('icons/favicon-64.png') ?>" type="image/png" sizes="64x64">
   <link rel="apple-touch-icon" href="<?= asset('icons/icon-180.png') ?>">

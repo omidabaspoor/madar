@@ -70,6 +70,7 @@
 
   let picker = null, active = null;
   function close(){ picker?.remove(); picker = null; active = null; }
+  
   function setDate(ctx, j){
     const g = jToG(j[0], j[1], j[2]);
     ctx.original.value = ctx.hasTime ? (inputFromGreg(g) + 'T' + (ctx.time?.value || timeFromInput(ctx.original.value))) : inputFromGreg(g);
@@ -78,9 +79,14 @@
     ctx.original.dispatchEvent(new Event('change', {bubbles:true}));
     close();
   }
+  
   function render(ctx, jy, jm){
     picker?.remove();
     picker = document.createElement('div'); picker.className = 'pdp-pop';
+    
+    // Stop click events inside the picker from bubbling up to document and triggering close()
+    picker.addEventListener('click', e => e.stopPropagation());
+    
     const selectedG = gregFromInput(ctx.original.value); const selectedJ = selectedG ? gToJ(...selectedG) : null;
     const tJ = todayJ();
     const first = weekdayJ(jy,jm,1), len = monthLen(jy,jm);
@@ -97,17 +103,19 @@
     const top = Math.min(window.innerHeight - picker.offsetHeight - 10, r.bottom + 8);
     picker.style.top = Math.max(8, top) + 'px';
     picker.style.left = Math.max(8, Math.min(window.innerWidth - picker.offsetWidth - 8, r.left)) + 'px';
-    picker.querySelector('[data-pdp-prev]').onclick = () => { jm--; if(jm<1){jm=12;jy--;} render(ctx,jy,jm); };
-    picker.querySelector('[data-pdp-next]').onclick = () => { jm++; if(jm>12){jm=1;jy++;} render(ctx,jy,jm); };
-    picker.querySelector('[data-pdp-today]').onclick = () => setDate(ctx, todayJ());
-    picker.querySelector('[data-pdp-clear]').onclick = () => { ctx.original.value=''; ctx.visible.value=''; ctx.original.dispatchEvent(new Event('change',{bubbles:true})); close(); };
-    picker.querySelectorAll('.pdp-day').forEach(b => b.onclick = () => setDate(ctx, [jy,jm,parseInt(b.dataset.d)]));
+    picker.querySelector('[data-pdp-prev]').onclick = (e) => { e.stopPropagation(); jm--; if(jm<1){jm=12;jy--;} render(ctx,jy,jm); };
+    picker.querySelector('[data-pdp-next]').onclick = (e) => { e.stopPropagation(); jm++; if(jm>12){jm=1;jy++;} render(ctx,jy,jm); };
+    picker.querySelector('[data-pdp-today]').onclick = (e) => { e.stopPropagation(); setDate(ctx, todayJ()); };
+    picker.querySelector('[data-pdp-clear]').onclick = (e) => { e.stopPropagation(); ctx.original.value=''; ctx.visible.value=''; ctx.original.dispatchEvent(new Event('change',{bubbles:true})); close(); };
+    picker.querySelectorAll('.pdp-day').forEach(b => b.onclick = (e) => { e.stopPropagation(); setDate(ctx, [jy,jm,parseInt(b.dataset.d)]); });
   }
+  
   function open(ctx){
     active = ctx;
     const g = gregFromInput(ctx.original.value); const j = g ? gToJ(...g) : todayJ();
     render(ctx, j[0], j[1]);
   }
+  
   function enhance(input){
     if (input.dataset.pdpReady) return; input.dataset.pdpReady = '1';
     const originalType = input.type;
@@ -124,11 +132,38 @@
     input.insertAdjacentElement('afterend', visible);
     if (time) visible.insertAdjacentElement('afterend', time);
     const ctx = {original: input, visible, time, hasTime};
-    const updateManual = () => { const j = parseJalaliText(visible.value); if (j) input.value = inputFromGreg(jToG(...j)) + (hasTime ? ('T' + (time?.value || '08:00')) : ''); };
-    visible.addEventListener('focus', () => open(ctx));
-    visible.addEventListener('click', () => open(ctx));
+    const updateManual = () => {
+      if (visible.value === '') {
+        input.value = '';
+        input.dispatchEvent(new Event('input', {bubbles:true}));
+        input.dispatchEvent(new Event('change', {bubbles:true}));
+        return;
+      }
+      const j = parseJalaliText(visible.value);
+      if (j) {
+        input.value = inputFromGreg(jToG(...j)) + (hasTime ? ('T' + (time?.value || '08:00')) : '');
+        input.dispatchEvent(new Event('input', {bubbles:true}));
+        input.dispatchEvent(new Event('change', {bubbles:true}));
+      }
+    };
+    visible.addEventListener('focus', (e) => { e.stopPropagation(); open(ctx); });
+    visible.addEventListener('click', (e) => { e.stopPropagation(); open(ctx); });
     visible.addEventListener('input', updateManual);
-    visible.addEventListener('blur', () => { const j = parseJalaliText(visible.value); if (j) setTimeout(()=>{ if(active===ctx) setDate(ctx,j); }, 120); });
+    visible.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (visible.value === '') {
+          input.value = '';
+          input.dispatchEvent(new Event('change', {bubbles:true}));
+        } else {
+          const j = parseJalaliText(visible.value);
+          if (j) {
+            visible.value = labelFromJ(j);
+            input.value = inputFromGreg(jToG(...j)) + (hasTime ? ('T' + (time?.value || '08:00')) : '');
+            input.dispatchEvent(new Event('change', {bubbles:true}));
+          }
+        }
+      }, 150);
+    });
     time?.addEventListener('change', updateManual);
   }
   function init(){ document.querySelectorAll('input[type="date"]:not([data-no-persian-date]),input[type="datetime-local"]:not([data-no-persian-date])').forEach(enhance); }

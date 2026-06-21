@@ -30,6 +30,11 @@ function internal_exam_analysis_schema_ready(): bool {
           CONSTRAINT fk_internal_exam FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
           CONSTRAINT fk_internal_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        $cols=[]; foreach(db()->query('SHOW COLUMNS FROM internal_exam_analyses')->fetchAll() as $c) $cols[$c['Field']]=true;
+        if(empty($cols['issues_json'])) {
+            try { db()->exec("ALTER TABLE internal_exam_analyses ADD COLUMN issues_json LONGTEXT NULL AFTER analysis_json"); } catch(Throwable $e) {}
+        }
         return $ok = true;
     } catch (Throwable $e) { return $ok = false; }
 }
@@ -74,7 +79,25 @@ function internal_analysis_by_attempt(int $attemptId): ?array {
     $r['behavior'] = $r['behavior_json'] ? (json_decode($r['behavior_json'], true) ?: []) : [];
     $r['analysis'] = $r['analysis_json'] ? (json_decode($r['analysis_json'], true) ?: []) : [];
     $payload = internal_attempt_payload($attemptId);
-    if ($payload) { $r['subjects']=$payload['subjects']; $r['issues']=$payload['issues']; $r['payload']=$payload; }
+    if ($payload) {
+        $saved_issues = !empty($r['issues_json']) ? (json_decode($r['issues_json'], true) ?: []) : [];
+        $reasons_lookup = [];
+        foreach ($saved_issues as $si) {
+            if (isset($si['question_number'])) {
+                $reasons_lookup[(int)$si['question_number']] = $si['reason'] ?? 'unknown';
+            }
+        }
+        foreach ($payload['issues'] as &$iss) {
+            if (isset($reasons_lookup[$iss['question_number']])) {
+                $iss['reason'] = $reasons_lookup[$iss['question_number']];
+            }
+        }
+        unset($iss);
+        
+        $r['subjects'] = $payload['subjects'];
+        $r['issues'] = $payload['issues'];
+        $r['payload'] = $payload;
+    }
     return $r;
 }
 function internal_analysis(int $id): ?array {
@@ -100,11 +123,27 @@ function internal_analysis_save(int $studentId, int $attemptId, array $in): int 
       'next_strategy'=>mock_txt($in['next_strategy'] ?? '',500),
       'mistake_pattern'=>mock_txt($in['mistake_pattern'] ?? '',500),
     ];
-    $analysis = mock_build_analysis($payload['report'], $payload['subjects'], $behavior, $payload['issues']);
+    
+    // Map incoming reasons back into the issues array
+    $in_issues = $in['issues'] ?? [];
+    foreach ($payload['issues'] as &$iss) {
+        $qNum = (int)$iss['question_number'];
+        if (isset($in_issues[$qNum]['reason'])) {
+            $iss['reason'] = mock_txt($in_issues[$qNum]['reason'], 40);
+        }
+    }
+    unset($iss);
+    
+    // Clean and validate issues
+    $cleaned_issues = mock_clean_issues($payload['issues']);
+    
+    $analysis = mock_build_analysis($payload['report'], $payload['subjects'], $behavior, $cleaned_issues);
     $student = get_user($studentId);
     $advisorId = (int)($exam['advisor_id'] ?? ($student['advisor_id'] ?? 0)) ?: null;
-    db()->prepare('INSERT INTO internal_exam_analyses (attempt_id,exam_id,student_id,advisor_id,behavior_json,analysis_json,student_note,status) VALUES (?,?,?,?,?,?,?,"submitted") ON DUPLICATE KEY UPDATE behavior_json=VALUES(behavior_json), analysis_json=VALUES(analysis_json), student_note=VALUES(student_note), status="submitted"')
-      ->execute([$attemptId,(int)$exam['id'],$studentId,$advisorId,json_encode($behavior,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),json_encode($analysis,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),mock_txt($in['student_note']??'',1500)?:null]);
+    
+    db()->prepare('INSERT INTO internal_exam_analyses (attempt_id,exam_id,student_id,advisor_id,behavior_json,analysis_json,issues_json,student_note,status) VALUES (?,?,?,?,?,?,?,?,"submitted") ON DUPLICATE KEY UPDATE behavior_json=VALUES(behavior_json), analysis_json=VALUES(analysis_json), issues_json=VALUES(issues_json), student_note=VALUES(student_note), status="submitted"')
+      ->execute([$attemptId,(int)$exam['id'],$studentId,$advisorId,json_encode($behavior,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),json_encode($analysis,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),json_encode($cleaned_issues,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),mock_txt($in['student_note']??'',1500)?:null]);
+      
     $id = (int)db()->query('SELECT id FROM internal_exam_analyses WHERE attempt_id='.(int)$attemptId)->fetchColumn();
     if ($advisorId) notify($advisorId, 'تحلیل آزمون داخلی ثبت شد 🧠', ($student['full_name'] ?? 'دانش‌آموز').' تحلیل آزمون «'.$exam['title'].'» را تکمیل کرد.', 'chart', 'admin/internal_exam_reports.php');
     return $id;

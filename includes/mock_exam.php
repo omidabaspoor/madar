@@ -93,7 +93,25 @@ function mock_clean_subjects(array $rows): array {
 
 function mock_clean_issues(array $rows): array {
     $types = ['wrong'=>'غلط','blank'=>'نزده'];
-    $reasons = ['concept'=>'ضعف مفهومی','careless'=>'بی‌دقتی','time'=>'کمبود زمان','doubt'=>'شک بین گزینه‌ها','forgot'=>'فراموشی نکته','strategy'=>'استراتژی غلط','unknown'=>'نامشخص'];
+    $reasons = [
+        'concept' => 'ضعف علمی و مفهومی',
+        'careless_calc' => 'بی‌دقتی در محاسبات عددی',
+        'careless_read' => 'بی‌دقتی در خواندن صورت سوال یا گزینه‌ها',
+        'forgot' => 'فراموشی فرمول، فرضیه یا نکته کلیدی',
+        'doubt' => 'شک بین دو گزینه (انتخاب اشتباه)',
+        'trap' => 'افتادن در تله آموزشی/علمی طراح',
+        'time_rush' => 'کمبود زمان و حل شتاب‌زده',
+        'bubble_err' => 'اشتباه در وارد کردن گزینه در پاسخبرگ',
+        'not_studied' => 'عدم مطالعه یا حذف مبحث از قبل',
+        'not_mastered' => 'عدم تسلط کافی (با وجود مطالعه مبحث)',
+        'no_time' => 'کمبود زمان (اصلاً به سوال نرسیدم)',
+        'too_hard' => 'دشواری بیش از حد سوال (ارزش ریسک نداشت)',
+        'doubt_many' => 'شک بین سه یا چهار گزینه',
+        'strategy' => 'استراتژی اشتباه در اولویت‌بندی سوال',
+        'careless' => 'بی‌دقتی',
+        'time' => 'کمبود زمان',
+        'unknown' => 'نامشخص'
+    ];
     $out=[];
     foreach($rows as $r){
         if(!is_array($r)) continue;
@@ -136,6 +154,22 @@ function mock_build_analysis(array $report, array $subjects, array $behavior, ar
     $wrongRate = $totalQ>0 ? round($wrong/$totalQ*100) : null;
     if ($percent === null && $totalQ>0) $percent = round((($correct - $wrong/3)/max(1,$totalQ))*100,1);
 
+    // Calculate issue counts
+    $issueCounts = [];
+    $issueSubjectCounts = [];
+    foreach ($issues as $iss) {
+        $r_key = $iss['reason'] ?? 'unknown';
+        $sub = $iss['subject'] ?? '';
+        if ($r_key !== '') {
+            $issueCounts[$r_key] = ($issueCounts[$r_key] ?? 0) + 1;
+        }
+        if ($sub !== '') {
+            $issueSubjectCounts[$sub] = ($issueSubjectCounts[$sub] ?? 0) + 1;
+        }
+    }
+    arsort($issueCounts);
+    arsort($issueSubjectCounts);
+
     $rankScore = null;
     if ($rank && $participants) $rankScore = round(max(0, min(100, (1 - (($rank-1)/$participants))*100)));
     $execution = $percent !== null ? max(0,min(100, round($percent))) : ($score ? max(0,min(100,round(($score-3000)/70))) : 0);
@@ -166,7 +200,49 @@ function mock_build_analysis(array $report, array $subjects, array $behavior, ar
     if ($wrongRate !== null && $wrongRate > 25) $recs[]='قبل از افزایش حجم تست، یک چک‌لیست بی‌دقتی و دام تستی بسازید و در آزمون بعدی اجرا کنید.';
     if ($blankRate !== null && $blankRate > 30) $recs[]='استراتژی سه‌مرحله‌ای آزمون اجرا شود: دور اول سوالات ساده، دور دوم متوسط، دور سوم فقط سوالات زمان‌بر منتخب.';
     if (!empty($behavior['main_cause'])) $recs[]='علت اصلی اعلام‌شده توسط دانش‌آموز («'.$behavior['main_cause'].'») باید در برنامه هفته آینده به اقدام قابل اندازه‌گیری تبدیل شود.';
-    if (!empty($issueCounts)) { $top = array_key_first($issueCounts); $labels=['concept'=>'ضعف مفهومی','careless'=>'بی‌دقتی','time'=>'کمبود زمان','doubt'=>'شک بین گزینه‌ها','forgot'=>'فراموشی نکته','strategy'=>'استراتژی غلط','unknown'=>'نامشخص']; $recs[]='ریشه پرتکرار خطاها: '.($labels[$top]??$top).'؛ برنامه هفته آینده باید مستقیم برای کاهش همین عامل طراحی شود.'; }
+
+    // Custom smart rules based on top reason
+    if (!empty($issueCounts)) {
+        $top = array_key_first($issueCounts);
+        $labels = [
+            'concept' => 'ضعف علمی و مفهومی',
+            'careless_calc' => 'بی‌دقتی در محاسبات عددی',
+            'careless_read' => 'بی‌دقتی در خواندن صورت سوال یا گزینه‌ها',
+            'forgot' => 'فراموشی فرمول، فرضیه یا نکته کلیدی',
+            'doubt' => 'شک بین دو گزینه (انتخاب اشتباه)',
+            'trap' => 'افتادن در تله آموزشی/علمی طراح',
+            'time_rush' => 'کمبود زمان و حل شتاب‌زده',
+            'bubble_err' => 'اشتباه در وارد کردن گزینه در پاسخبرگ',
+            'not_studied' => 'عدم مطالعه یا حذف مبحث از قبل',
+            'not_mastered' => 'عدم تسلط کافی (با وجود مطالعه مبحث)',
+            'no_time' => 'کمبود زمان (اصلاً به سوال نرسیدم)',
+            'too_hard' => 'دشواری بیش از حد سوال (ارزش ریسک نداشت)',
+            'doubt_many' => 'شک بین سه یا چهار گزینه',
+            'strategy' => 'استراتژی اشتباه در اولویت‌بندی سوال',
+            'careless' => 'بی‌دقتی',
+            'time' => 'کمبود زمان',
+            'unknown' => 'نامشخص'
+        ];
+        $top_lbl = $labels[$top] ?? $top;
+        $recs[] = 'ریشه پرتکرار خطاها: «' . $top_lbl . '»؛ برنامه هفته آینده باید مستقیم برای کاهش همین عامل طراحی شود.';
+
+        if ($top === 'careless_calc' || $top === 'careless_read' || $top === 'careless') {
+            $recs[] = '💡 تحلیل رفتاری نشان می‌دهد بخش عمده کسر نمره شما از بی‌دقتی است. در آزمون بعدی سرعت خواندن دفترچه را ۱۰٪ کاهش دهید و محاسبات را در فضای مشخص چرک‌نویس کنید.';
+        } elseif ($top === 'concept' || $top === 'forgot') {
+            $recs[] = '💡 ضعف علمی یا فراموشی عامل اصلی خطاهای شماست. برای دروس درگیر، اختصاص ۲ واحد تست آموزشی و مرور خلاصه‌ها در اول هفته توصیه می‌شود.';
+        } elseif ($top === 'time_rush' || $top === 'no_time' || $top === 'time') {
+            $recs[] = '💡 چالش جدی مدیریت زمان دارید. تست‌های خانگی را به صورت مجموعه‌ای و زمان‌دار بزنید تا مغز شما به مدیریت تایمر عادت کند.';
+        } elseif ($top === 'doubt' || $top === 'doubt_many') {
+            $recs[] = '💡 شک بین گزینه‌ها به شما آسیب زده است. پیشنهاد می‌شود تکنیک حذف گزینه را دقیق‌تر پیاده کنید و در شک‌های ۵۰-۵۰، گزینه اولی که به چشمتان آمد را تغییر ندهید یا کلاً نزنید.';
+        } elseif ($top === 'trap') {
+            $recs[] = '💡 شما مکرراً در دام‌های طراحان آزمون افتاده‌اید. حتماً گزینه‌های انحرافی آزمون را در دفترچه خود یادداشت کرده و نکات دام‌های تستی را مرور کنید.';
+        } elseif ($top === 'not_studied' || $top === 'not_mastered') {
+            $recs[] = '💡 علت سفیدی سوالات، مباحث مطالعه‌نشده یا تسلط کم است. در هماهنگی با مشاور، پیش‌نیازها و بخش‌های کلیدی این فصول را به برنامه اضافه کنید.';
+        } elseif ($top === 'too_hard') {
+            $recs[] = '💡 تصمیم هوشمندانه برای رها کردن سوالات بیش از حد دشوار؛ این تفکر حرفه‌ای باعث نجات تراز و جلوگیری از نمره منفی شما شده است.';
+        }
+    }
+
     if (!$recs) $recs[]='روند کلی قابل قبول است؛ تمرکز اصلی روی حفظ نقاط قوت و تحلیل جزئی غلط‌ها باشد.';
 
     $summary = [];

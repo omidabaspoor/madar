@@ -24,9 +24,13 @@ function report_schema_ready(): bool
           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           PRIMARY KEY (id),
-          UNIQUE KEY uq_student_report (student_id, report_type, period_start),
-          KEY idx_report_student (student_id, report_type, period_start),
-          KEY idx_report_status (status, submitted_at)
+          UNIQUE KEY uq_internal_attempt (attempt_id),
+          KEY idx_student (student_id),
+          KEY idx_advisor (advisor_id),
+          KEY idx_exam (exam_id),
+          CONSTRAINT fk_internal_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,
+          CONSTRAINT fk_internal_exam FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
+          CONSTRAINT fk_internal_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         // برای نصب‌هایی که جدول را با نسخه قدیمی/ناقص ساخته‌اند، ستون‌های ضروری را ترمیم کن.
         $cols = [];
@@ -471,7 +475,7 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
     $alerts = [];
     if ($progress <= 0 && $pendingRate >= 80) $alerts[] = ['level'=>'danger','title'=>'هیچ اجرای مؤثری ثبت نشده','text'=>'برای این بازه تسک وجود دارد، اما هنوز اجرای کامل یا ناقص قابل قبول ثبت نشده است.'];
     if ($progress <= 0 && $missedRate >= 50) $alerts[] = ['level'=>'danger','title'=>'برنامه عملاً اجرا نشده','text'=>'بیشتر تسک‌های این بازه قرمز یا بدون امتیاز هستند و نیاز به اقدام فوری دارد.'];
-    if ($burnout >= 70) $alerts[] = ['level'=>'danger','title'=>'ریسک افت جدی','text'=>'ترکیب اجرای پایین، تسک قرمز، فشار یا افت نسبت به قبل نیاز به پیگیری سریع دارد.'];
+    if ($burnout >= 70) $alerts[] = ['level'=>'danger','title'=>'ریسک افت جدی','text'=>'ترکیب اجرای پایین، تسک قرمز، فشار یا افت نسبت به قبل نیاز به اقدام سریع دارد.'];
     elseif ($burnout >= 45) $alerts[] = ['level'=>'warn','title'=>'ریسک افت متوسط','text'=>'بهتر است فشار برنامه، خواب و علت اجرا نشدن بررسی شود.'];
     if ($missedRate >= 25) $alerts[] = ['level'=>'danger','title'=>'تسک قرمز زیاد','text'=>'بخش قابل توجهی از برنامه اجرا نشده و باید اولویت‌بندی مجدد شود.'];
     if ($targetTests > 0 && $testsDone < $targetTests*.7) $alerts[] = ['level'=>'warn','title'=>'تست کمتر از هدف','text'=>'تعداد تست‌ها نسبت به هدف برنامه پایین‌تر است.'];
@@ -570,4 +574,52 @@ function report_build_analysis(int $studentId, string $type, string $start, stri
         'action_plan'=>array_slice($actionPlan,0,4),
         'summary'=>implode(' ', $summaryBits),
     ];
+}
+
+function report_lock_past_daily_reports(int $studentId): void
+{
+    report_schema_ready();
+    $student = get_user($studentId);
+    $advisorId = (int)($student['advisor_id'] ?? 0);
+    if (!$advisorId) return;
+
+    // Check the last 5 days
+    for ($i = 1; $i <= 5; $i++) {
+        $date = date('Y-m-d', strtotime("-$i day"));
+        [$s, $e] = report_period('daily', $date);
+        
+        // If there were published tasks scheduled for this student on that day
+        if (report_period_has_tasks($studentId, $s, $e)) {
+            $st = db()->prepare('SELECT * FROM student_reports WHERE student_id=? AND report_type="daily" AND period_start=? LIMIT 1');
+            $st->execute([$studentId, $s]);
+            $r = $st->fetch();
+            
+            if (!$r) {
+                // If no report existed, we create a locked draft report
+                $adv = ['advisor_notified_missed' => true];
+                $json_adv = json_encode($adv, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+                $snap = report_auto_snapshot($studentId, $s, $e);
+                $json_snap = json_encode($snap, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+                
+                db()->prepare('INSERT INTO student_reports (student_id,report_type,period_start,period_end,auto_snapshot_json,advanced_json,status) VALUES (?, "daily", ?, ?, ?, ?, "draft")')
+                    ->execute([$studentId, $s, $e, $json_snap, $json_adv]);
+                    
+                // Notify the advisor
+                notify($advisorId, '⚠️ عدم ثبت گزارش روزانه', $student['full_name'] . ' گزارش روزانه خود را برای تاریخ ' . jalali_date($s) . ' تا پایان شب تکمیل نکرد و سیستم آن را قفل نمود.', 'chart', 'admin/student_reports.php?student=' . $studentId . '&type=daily');
+            } else {
+                // If a report exists but is still in draft state
+                $adv = $r['advanced_json'] ? (json_decode($r['advanced_json'], true) ?: []) : [];
+                if ($r['status'] === 'draft' && empty($adv['advisor_notified_missed'])) {
+                    $adv['advisor_notified_missed'] = true;
+                    $json_adv = json_encode($adv, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+                    
+                    db()->prepare('UPDATE student_reports SET advanced_json=? WHERE id=?')
+                        ->execute([$json_adv, $r['id']]);
+                        
+                    // Notify the advisor
+                    notify($advisorId, '⚠️ عدم ثبت گزارش روزانه', $student['full_name'] . ' گزارش روزانه خود را برای تاریخ ' . jalali_date($s) . ' تا پایان شب تکمیل نکرد و سیستم آن را قفل نمود.', 'chart', 'admin/student_reports.php?student=' . $studentId . '&type=daily');
+                }
+            }
+        }
+    }
 }

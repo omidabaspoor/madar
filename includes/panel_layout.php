@@ -23,38 +23,35 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
 
     $items = $role === 'admin' ? [
         'main' => array_filter([
-            ['dashboard','داشبورد','home','admin/dashboard.php'],
-            is_chief_advisor() ? ['advisors','مشاوران','users','admin/advisors.php'] : null,
-            ['students','دانش‌آموزان','users','admin/students.php'],
-            ['plans','برنامه‌ها','calendar','admin/plans.php'],
-            ['exams','آزمون‌ها','clipboard','admin/exams.php'],
-            ['internal_exam','تحلیل آزمون مَدار','chart','admin/internal_exam_reports.php'],
-            ['mock_exam','آزمون آزمایشی','target','admin/mock_exam_reports.php'],
-            ['reports','گزارش‌ها','chart','admin/reports.php'],
-            ['student_reports','گزارش حرفه‌ای','edit','admin/student_reports.php'],
-            ['reviews','مرورها','repeat','admin/reviews.php'],
-            ['messages','پیام‌ها','message','admin/messages.php'],
-            is_chief_advisor() ? ['logs','لاگ فعالیت','list','admin/logs.php'] : null,
+            ['dashboard','داشبورد کلان','home','admin/dashboard.php'],
+            is_chief_advisor() ? ['advisors','مدیریت مشاوران','users','admin/advisors.php'] : null,
+            ['students','دانش‌آموزان من','users','admin/students.php'],
+            ['plans','برنامه‌ریزی هفتگی','calendar','admin/plans.php'],
+            ['meetings','برنامه‌ریزی جلسات','calendar','admin/schedule_meeting.php'],
+            ['exams','آزمون‌ساز آنلاین','clipboard','admin/exams.php'],
+            ['student_reports','گزارش‌های روزانه/حرفه‌ای','edit','admin/student_reports.php'],
+            ['internal_exam','کارنامه‌ها و تحلیل آزمون','chart','admin/internal_exam_reports.php'],
+            ['messages','پیام‌ها و چت‌باکس','message','admin/messages.php'],
         ]),
         'other' => [
-            ['achievements','دستاوردها','trophy','admin/achievements.php'],
-            ['settings','تنظیمات','settings','admin/settings.php'],
+            ['achievements','مدیریت دستاوردها','trophy','admin/achievements.php'],
+            ['settings','تنظیمات سامانه','settings','admin/settings.php'],
         ],
     ] : [
         'main' => [
             ['dashboard','خانه','home','student/dashboard.php'],
-            ['plan','برنامه','calendar','student/plan.php'],
-            ['reviews','مرورها','repeat','student/reviews.php'],
-            ['exams','آزمون','clipboard','student/exams.php'],
-            ['internal_exam','تحلیل آزمون مَدار','chart','student/internal_exam_analysis.php'],
-            ['mock_exam','آزمون آزمایشی','target','student/mock_exam.php'],
-            ['progress','گزارش','chart','student/progress.php'],
-            ['reports','گزارش پیشرفته','edit','student/reports.php?type=weekly'],
-            ['messages','پیام','message','student/messages.php'],
+            ['plan','برنامه هفتگی','calendar','student/plan.php'],
+            ['reports','گزارش حرفه‌ای','edit','student/reports.php?type=weekly'],
+            ['meetings','جلسات مشاوره','calendar','student/meetings.php'],
+            ['exams','آزمون‌های آنلاین','clipboard','student/exams.php'],
+            ['exam_analyses','تحلیل آزمون‌ها','chart','student/exam_analyses.php'],
+            ['messages','پیام با مشاور','message','student/messages.php'],
+            ['progress','نمودار پیشرفت','chart','student/progress.php'],
+            ['reviews','برنامه مرور','repeat','student/reviews.php'],
         ],
         'other' => [
             ['achievements','دستاوردها','trophy','student/achievements.php'],
-            ['profile','پروفایل','user','student/profile.php'],
+            ['profile','پروفایل من','user','student/profile.php'],
         ],
     ];
 
@@ -105,6 +102,11 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
         </div>
       </div>
       <div class="tb-actions">
+        <?php if ($role === 'admin' || $role === 'advisor'): ?>
+          <button class="btn btn-gold btn-sm flex items-center gap-1.5" id="advisorTourBtn" style="font-weight: 900; box-shadow: 0 4px 12px rgba(178,148,95,0.25); border-radius: 12px; height: 38px;">
+            🎓 <span>آموزش پنل</span>
+          </button>
+        <?php endif; ?>
         <a href="<?= url($role==='admin'?'admin/messages.php':'student/messages.php') ?>" class="tb-btn" data-tip="پیام‌ها"><?= icon('message',20) ?><?php if($msgCount>0):?><span class="dot"></span><?php endif;?></a>
         <button class="tb-btn" id="notifBtn" data-tip="اعلان‌ها"><?= icon('bell',20) ?><?php if($notifCount>0):?><span class="dot"></span><?php endif;?></button>
         <span class="badge badge-sage" style="padding:8px 12px"><?= icon('fire',15) ?> <?= fa_num($u['streak'] ?? 0) ?> روز</span>
@@ -150,5 +152,9 @@ function panel_end(array $extraJs = []): void
   window.NOTIF_READ_URL = window.NOTIF_READ_URL || '<?= url('api/notifications.php?read=1') ?>';
 </script>
 <?php
-  page_foot(array_merge(['panel.js'], $extraJs));
+  $finalJs = ['panel.js'];
+  if ($ctx && $ctx['role'] === 'admin') {
+      $finalJs[] = 'advisor_tour.js';
+  }
+  page_foot(array_merge($finalJs, $extraJs));
 }

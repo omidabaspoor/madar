@@ -124,6 +124,11 @@ function advisor_students(int $advisorId, ?string $status = null, string $q = ''
             KEY idx_asa_student (student_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     } catch (Throwable $e) { /* اگر مجوز ALTER نبود، کوئری اصلی خطای قابل مشاهده می‌دهد */ }
+    
+    $adv = get_user($advisorId);
+    $accessMode = $adv['access_mode'] ?? 'all';
+    $role = $adv['role'] ?? 'advisor';
+    
     $score = task_score_sql('t');
     $sql = 'SELECT u.*,
             (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id) AS total_tasks,
@@ -131,13 +136,27 @@ function advisor_students(int $advisorId, ?string $status = null, string $q = ''
             (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id AND t.completion_status="full") AS full_tasks,
             (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id AND t.completion_status="partial") AS partial_tasks,
             (SELECT COUNT(*) FROM tasks t WHERE t.student_id=u.id AND t.completion_status="missed") AS missed_tasks
-            FROM users u WHERE u.role="student" 
-            AND (
-                u.advisor_id=? 
-                OR ? IN (SELECT id FROM users WHERE role="admin" OR (role="advisor" AND access_mode="all"))
-                OR u.id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id=?)
-            )';
-    $params = [$advisorId, $advisorId, $advisorId];
+            FROM users u WHERE u.role="student"';
+            
+    $params = [];
+    
+    if ($accessMode === 'restricted') {
+        // If restricted, ONLY show students explicitly allocated in advisor_student_access
+        $sql .= ' AND u.id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id = ?)';
+        $params[] = $advisorId;
+    } else {
+        // If access mode is 'all'
+        if ($role === 'admin') {
+            // Admin (Dr Sajjad) with 'all' sees all students in the system
+            $sql .= ' AND 1=1';
+        } else {
+            // Advisor with 'all' sees students directly assigned or in advisor_student_access
+            $sql .= ' AND (u.advisor_id = ? OR u.id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id = ?))';
+            $params[] = $advisorId;
+            $params[] = $advisorId;
+        }
+    }
+    
     if ($status) { $sql .= ' AND u.status=?'; $params[] = $status; }
     if ($q !== '') { $sql .= ' AND (u.full_name LIKE ? OR u.username LIKE ?)'; $params[] = "%$q%"; $params[] = "%$q%"; }
     $sql .= ' ORDER BY FIELD(u.status,"pending","active","suspended"), u.created_at DESC';

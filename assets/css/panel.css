@@ -139,22 +139,31 @@
 .bottom-nav { display:none; }
 @media (max-width: 860px) {
   .bottom-nav {
-    display:flex; position:fixed; bottom:0; left:0; right:0; z-index:120; height:64px;
-    background:rgba(12,21,18,.94); backdrop-filter:blur(18px); border-top:1px solid var(--border);
-    padding:6px 6px calc(6px + env(safe-area-inset-bottom)); justify-content:space-around; align-items:stretch;
+    display:flex; position:fixed; bottom:12px; left:12px; right:12px; z-index:999; height:68px;
+    background:rgba(12,21,18,.88); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    border:1px solid rgba(178,148,95,.25); border-radius:22px;
+    padding:6px 10px; justify-content:space-around; align-items:center;
+    box-shadow:0 16px 40px rgba(0,0,0,.6);
   }
   .bn-item {
-    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
-    color:var(--text-3); border-radius:14px; transition:.2s; position:relative; padding:4px 2px;
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    color:var(--text-3); border-radius:16px; transition:all .25s ease; position:relative; padding:6px 2px;
+    height:100%;
   }
-  .bn-item .bn-ico { position:relative; display:grid; place-items:center; transition:.2s; }
-  .bn-item .bn-lbl { font-size:.66rem; font-weight:700; }
+  .bn-item .bn-ico { position:relative; display:grid; place-items:center; transition:all .25s ease; width:38px; height:38px; border-radius:12px; }
+  .bn-item .bn-lbl { font-size:.65rem; font-weight:800; opacity:.8; transition:all .25s ease; }
   .bn-item.active { color:var(--gold-light); }
-  .bn-item.active .bn-ico { transform:translateY(-2px); }
-  .bn-item.active::before { content:''; position:absolute; top:0; width:26px; height:3px; border-radius:3px; background:var(--grad-gold); }
-  .bn-dot { position:absolute; top:-2px; left:-4px; width:8px; height:8px; border-radius:50%; background:var(--gold); border:2px solid var(--bg); }
+  .bn-item.active .bn-ico { 
+    background:linear-gradient(135deg, rgba(224,197,149,0.15), rgba(178,148,95,0.05));
+    border:1px solid rgba(178,148,95,0.3);
+    color:var(--gold-light);
+    transform:translateY(-4px);
+    box-shadow:0 4px 12px rgba(178,148,95,0.15);
+  }
+  .bn-item.active .bn-lbl { opacity:1; font-weight:900; color:var(--gold-light); transform:translateY(-2px); }
+  .bn-dot { position:absolute; top:2px; left:2px; width:8px; height:8px; border-radius:50%; background:var(--gold); border:2px solid var(--bg); }
   /* فضای پایین برای محتوا تا زیر نوار نرود */
-  .content { padding-bottom: 84px !important; }
+  .content { padding-bottom: 96px !important; }
 }
 @media (max-width: 520px) {
   /* کارت‌های آمار ۲ ستونه و فشرده */

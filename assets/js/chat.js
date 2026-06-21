@@ -101,6 +101,7 @@
       contacts = d.items || [];
       renderContacts();
       if (window.INIT_WITH && !active) openChat(window.INIT_WITH);
+      else if (!active && window.MY_ROLE === 'student' && contacts.length > 0) openChat(contacts[0].id);
       else if (!active && window.matchMedia('(max-width: 900px)').matches) openContactsPanel();
     } catch(e) {
       contactsEl.innerHTML = '<div class="empty-state" style="padding:30px">خطا در دریافت گفتگوها</div>';

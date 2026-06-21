@@ -62,7 +62,16 @@ panel_start('گزارش حرفه‌ای', $student['full_name'].' · '.report_ty
   <div class="panel-head between wrap gap-2">
     <div class="flex items-center gap-3">
       <h3><?= e(report_type_label($r['report_type'])) ?> · <?= jalali_date($r['period_start']) ?><?= $r['period_start']!==$r['period_end']?' تا '.jalali_date($r['period_end']):'' ?></h3>
-      <span class="badge <?= $r['status']==='submitted'?'badge-sage':'badge-gold' ?>"><?= $r['status']==='submitted'?'ارسال شده':'تکمیل نشده' ?></span>
+      <?php 
+        $isReportLocked = ($r['report_type'] === 'daily' && $r['period_start'] < date('Y-m-d'));
+        if ($r['status'] === 'submitted'): 
+      ?>
+        <span class="badge badge-sage">ارسال شده</span>
+      <?php elseif ($isReportLocked): ?>
+        <span class="badge" style="background: rgba(220, 53, 69, 0.15); border: 1px solid rgba(220, 53, 69, 0.3); color: #ea868f; padding: 4px 10px; border-radius: 99px; font-weight: bold;">قفل شده (عدم ثبت)</span>
+      <?php else: ?>
+        <span class="badge badge-gold">تکمیل نشده</span>
+      <?php endif; ?>
     </div>
     <a href="<?= url('admin/student_report_pdf.php?report_id=' . $r['id']) ?>" target="_blank" class="btn btn-ghost btn-sm flex items-center gap-1.5" style="border-color:var(--gold); color:var(--gold-light); font-weight:800;">
       <?= icon('pie', 16) ?> <span>خروجی PDF این گزارش</span>
