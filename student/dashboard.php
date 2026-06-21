@@ -32,8 +32,34 @@ $first = explode(' ', (string)$u['full_name'])[0];
 
 $maxBar = max(1, max(array_map(fn($c)=>max((float)$c['total'], (float)$c['done']),$chart))); 
 
+require_once __DIR__ . '/../includes/meetings.php';
+meetings_schema_ready();
+$todayMeetings = [];
+try {
+    $todayMeetings = db()->query('SELECT * FROM consultation_sessions WHERE student_id='.(int)$u['id'].' AND session_date="'.date('Y-m-d').'" AND status="scheduled"')->fetchAll();
+} catch (Throwable $e) {
+    error_log($e->getMessage());
+}
+
 panel_start('خانه', jalali_date('now'), 'student', 'dashboard', ['student.css']);
 ?>
+
+<?php foreach($todayMeetings as $tm): ?>
+<div class="panel alert-pulse" style="background: linear-gradient(135deg, #1c2823, #0c1512); border: 2px solid var(--gold); border-radius: 18px; padding: 18px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 0 20px rgba(178,148,95,0.15); animation: pulse Glow 2s infinite alternate;">
+  <div style="display: flex; align-items: center; gap: 14px;">
+    <div style="background: rgba(178, 148, 95, 0.15); color: var(--gold-light); width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 1.3rem;">
+      🔔
+    </div>
+    <div>
+      <span style="font-size: 11px; color: var(--gold-light); font-weight: 900; text-transform: uppercase;">هشدار زنگ جلسه امروز 📅</span>
+      <h3 style="font-size: 15px; font-weight: 900; color: var(--text-1); margin-top: 3px;">جلسه مشاوره: «<?= e($tm['title']) ?>»</h3>
+      <p class="muted" style="font-size: 12.5px; margin-top: 2px;">امروز <?= $tm['session_time'] ? ('ساعت <b>' . fa_num(substr((string)$tm['session_time'], 0, 5)) . '</b>') : '<b>ساعت توافقی</b>' ?> برگزار خواهد شد. لطفاً آماده باشید!</p>
+    </div>
+  </div>
+  <a href="<?= url('student/meetings.php') ?>" class="btn btn-gold btn-sm" style="font-weight: 900;">ورود به اتاق جلسه</a>
+</div>
+<?php endforeach; ?>
+
 <!-- greeting -->
 <div class="greet-card reveal in">
   <div class="between" style="align-items:flex-start">
@@ -75,14 +101,7 @@ panel_start('خانه', jalali_date('now'), 'student', 'dashboard', ['student.cs
 </div>
 <?php endif; ?>
 
-<?php if($pendingReports): ?>
-<div class="panel report-due reveal" data-d="1" style="margin-bottom:18px">
-  <b><?= icon('bell',18) ?> گزارش تکمیلی در انتظار</b>
-  <div class="report-due-list">
-    <?php foreach($pendingReports as $pr): ?><a href="<?= e($pr['url']) ?>" class="badge badge-gold"><?= e($pr['label']) ?> · <?= jalali_date($pr['start']) ?></a><?php endforeach; ?>
-  </div>
-</div>
-<?php endif; ?>
+
 
 <!-- ==== TODAY'S TASKS (most important — first) ==== -->
 <div class="panel reveal" data-d="1" style="margin-bottom:18px">

@@ -12,10 +12,10 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 }
 $reports=mock_reports_for_student((int)$u['id']);
 $r=$editing; $subj=$r['subjects']??[]; $beh=$r['behavior']??[]; $an=$r['analysis']??null; $issues=$r['issues']??[];
-panel_start('آزمون آزمایشی/کنکور','ثبت و تحلیل آزمون‌های بیرونی', 'student','mock_exam',['mock_exam.css']);
+panel_start('تحلیل آزمون آزمایشی/کنکور','ثبت و تحلیل آزمون‌های بیرونی', 'student','exam_analyses',['mock_exam.css']);
 ?>
 <div class="mock-hero panel">
-  <div><span class="badge badge-gold"><?= icon('target',15) ?> تحلیل آزمون بیرونی</span><h2>آزمون آزمایشی/کنکور</h2><p>نتیجه آزمون‌های قلمچی، سنجش، گزینه‌دو، ماز یا کنکور را وارد کن تا مَدار تحلیل هوشمند و برنامه اقدام بدهد.</p></div>
+  <div><span class="badge badge-gold"><?= icon('target',15) ?> تحلیل آزمون بیرونی</span><h2>تحلیل آزمون آزمایشی/کنکور</h2><p>نتیجه آزمون‌های قلمچی، سنجش، گزینه‌دو، ماز یا کنکور را وارد کن تا مَدار تحلیل هوشمند و برنامه اقدام بدهد.</p></div>
   <div class="flex gap-2 wrap"><?php if($r): ?><a target="_blank" class="btn btn-gold" href="<?= url('student/mock_exam_pdf.php?id='.(int)$r['id']) ?>"><?= icon('clipboard',16) ?> خروجی PDF</a><?php endif; ?><button type="button" class="btn btn-ghost" id="fillMockSample">پر کردن نمونه</button></div>
 </div>
 

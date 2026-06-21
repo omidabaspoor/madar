@@ -5,6 +5,9 @@ require_once __DIR__ . '/../includes/panel_layout.php';
 boot_session();
 require_role('student');
 $u = current_user();
+
+report_lock_past_daily_reports((int)$u['id']);
+
 // اگر صفحه بدون پارامتر باز شد، به گزارش هفتگی همین هفته هدایت کن تا همیشه صفحه پایدار و قابل نمایش باشد.
 // گزارش روزانه همچنان از تب‌ها و لینک مستقیم در دسترس است.
 if (!isset($_GET['type']) && !isset($_GET['date'])) {
@@ -13,6 +16,7 @@ if (!isset($_GET['type']) && !isset($_GET['date'])) {
 $type = in_array($_GET['type'] ?? 'weekly', ['daily','weekly','monthly'], true) ? $_GET['type'] : 'weekly';
 $date = (string)($_GET['date'] ?? week_saturday());
 [$start,$end] = report_period($type,$date);
+$isLocked = ($type === 'daily' && $start < date('Y-m-d'));
 try {
     $report = report_get_or_create((int)$u['id'],$type,$start);
 } catch (Throwable $e) {
@@ -135,6 +139,12 @@ panel_start('گزارش‌دهی پیشرفته', report_type_label($type).' · 
 
 <form class="panel report-form" id="reportForm">
   <div class="panel-head"><h3><?= icon('edit',20) ?> گزارش تکمیلی <?= e(report_type_label($type)) ?></h3><span class="muted">فقط موارد مهم همین بازه</span></div>
+  <?php if($isLocked): ?>
+    <div class="alert alert-error" style="margin: 16px 0; background: rgba(220, 53, 69, 0.1); border: 1px solid rgba(220, 53, 69, 0.2); color: #ea868f; padding: 12px 16px; border-radius: 12px; display: flex; align-items: center; gap: 10px;">
+      <?= icon('lock', 20) ?>
+      <span style="font-weight: bold; font-size: 13.5px;">⚠️ این گزارش قفل شده است! شما فقط تا پایان هر روز فرصت دارید گزارش روزانه همان روز را ثبت یا ویرایش کنید.</span>
+    </div>
+  <?php endif; ?>
   <div class="form-grid">
     <div class="field"><label>جمع/میانگین خواب مفید</label><input class="input" type="number" step="0.25" min="0" max="16" name="sleep_hours" value="<?= e((string)($adv['sleep_hours']??'')) ?>" placeholder="مثلاً ۷.۵"></div>
     <div class="field"><label>کیفیت خواب</label><select class="input" name="sleep_quality"><?php for($i=1;$i<=5;$i++): ?><option value="<?= $i ?>" <?= (string)($adv['sleep_quality']??'')===(string)$i?'selected':'' ?>><?= fa_num($i) ?> از ۵</option><?php endfor; ?></select></div>
@@ -176,8 +186,23 @@ panel_start('گزارش‌دهی پیشرفته', report_type_label($type).' · 
 </form>
 <script>
 window.API_REPORTS='<?= url('api/reports.php') ?>';
+<?php if($isLocked): ?>
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('reportForm');
+  if (form) {
+    form.querySelectorAll('input, select, textarea, button[type="submit"]').forEach(el => {
+      el.disabled = true;
+    });
+  }
+});
+<?php endif; ?>
+
 document.getElementById('reportForm')?.addEventListener('submit', async (e)=>{
   e.preventDefault();
+  <?php if($isLocked): ?>
+  toast('این گزارش قفل شده است و امکان ارسال یا تغییر ندارد.','error');
+  return;
+  <?php endif; ?>
   const fd=new FormData(e.currentTarget), advanced={}; fd.forEach((v,k)=>advanced[k]=v);
   try{ await api(window.API_REPORTS,{method:'POST',body:{action:'submit',report_type:'<?= $type ?>',date:'<?= $start ?>',advanced}}); toast('گزارش با موفقیت ثبت شد','success'); setTimeout(()=>location.reload(),700); }
   catch(err){ toast(err.error||'خطا در ثبت گزارش','error'); }

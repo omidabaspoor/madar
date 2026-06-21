@@ -9,7 +9,7 @@ if($id && !$attemptId){ $old=internal_analysis($id); if($old) $attemptId=(int)$o
 if(!$attemptId){
   $st=db()->prepare('SELECT a.id attempt_id,a.submitted_at,a.total_score,e.title exam_title, ia.id analysis_id FROM exam_attempts a JOIN exams e ON e.id=a.exam_id LEFT JOIN internal_exam_analyses ia ON ia.attempt_id=a.id WHERE a.student_id=? AND a.status="submitted" ORDER BY a.submitted_at DESC LIMIT 50');
   $st->execute([(int)$u['id']]); $items=$st->fetchAll();
-  panel_start('تحلیل آزمون داخلی مَدار','یکی از آزمون‌های تکمیل‌شده را برای تحلیل انتخاب کن', 'student','internal_exam',['mock_exam.css']);
+  panel_start('تحلیل آزمون داخلی مَدار','یکی از آزمون‌های تکمیل‌شده را برای تحلیل انتخاب کن', 'student','exam_analyses',['mock_exam.css']);
   echo '<div class="mock-hero panel"><div><span class="badge badge-gold">تحلیل آزمون داخلی</span><h2>کدام آزمون را تحلیل کنیم؟</h2><p>بعد از هر آزمون داخلی، از همین صفحه می‌توانی تحلیل رفتاری و خروجی PDF بسازی.</p></div><a class="btn btn-ghost" href="'.url('student/exams.php').'">آزمون‌ها</a></div>';
   if(!$items) echo '<div class="panel"><div class="empty-state">هنوز آزمون داخلی ثبت‌شده‌ای نداری.</div></div>';
   else { echo '<div class="mock-list">'; foreach($items as $it){ $href=url('student/internal_exam_analysis.php?attempt='.(int)$it['attempt_id']); echo '<a class="panel" href="'.$href.'"><b>'.e($it['exam_title']).'</b><span>'.jalali_date($it['submitted_at'],true).' · نمره '.fa_num(round((float)$it['total_score'],1)).'٪</span><div class="mt-2"><span class="badge '.($it['analysis_id']?'badge-sage':'badge-gold').'">'.($it['analysis_id']?'تحلیل ثبت شده':'نیاز به تحلیل').'</span></div></a>'; } echo '</div>'; }
@@ -23,8 +23,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   try{ $newId=internal_analysis_save((int)$u['id'],$attemptId,$_POST); flash('success','تحلیل آزمون داخلی با موفقیت ثبت شد و برای مشاور ارسال شد.'); redirect('student/internal_exam_analysis.php?attempt='.$attemptId.'&saved=1'); }
   catch(Throwable $e){ flash('error', APP_ENV==='development'?$e->getMessage():'خطا در ثبت تحلیل آزمون'); }
 }
-$r=$existing; $rep=$payload['rep']; $subjects=$payload['subjects']; $issues=$payload['issues']; $an=$r['analysis']??null; $beh=$r['behavior']??[]; $reports=internal_analyses_for_student((int)$u['id']);
-panel_start('تحلیل آزمون داخلی مَدار','تحلیل رفتاری و برنامه اقدام برای آزمون‌های داخل سامانه', 'student','internal_exam',['mock_exam.css']);
+$r=$existing; $rep=$payload['rep']; $subjects=$payload['subjects']; $issues=$r['issues']??$payload['issues']; $an=$r['analysis']??null; $beh=$r['behavior']??[]; $reports=internal_analyses_for_student((int)$u['id']);
+panel_start('تحلیل آزمون داخلی مَدار','تحلیل رفتاری و برنامه اقدام برای آزمون‌های داخل سامانه', 'student','exam_analyses',['mock_exam.css']);
 ?>
 <div class="mock-hero panel">
   <div><span class="badge badge-gold"><?= icon('chart',15) ?> تحلیل آزمون داخلی مَدار</span><h2><?= e($rep['exam']['title']) ?></h2><p>نتیجه، درس‌ها و سوالات غلط/نزده از سیستم آزمون مَدار خوانده شده؛ فقط تجربه آزمون و جمع‌بندی خودت را بنویس تا تحلیل کامل ساخته شود.</p></div>
@@ -70,6 +70,51 @@ panel_start('تحلیل آزمون داخلی مَدار','تحلیل رفتار
     <div class="field"><label>استراتژی آزمون بعدی</label><textarea class="input" name="next_strategy" rows="3"><?= e($beh['next_strategy']??'') ?></textarea></div>
     <div class="field"><label>یادداشت آزاد برای مشاور</label><textarea class="input" name="student_note" rows="3"><?= e($r['student_note']??'') ?></textarea></div>
   </div>
+
+  <?php if (!empty($issues)): ?>
+  <div style="margin-top: 24px; border-top: 1px dashed #dfe7df; padding-top: 20px; margin-bottom: 24px;">
+    <h3><?= icon('list',18) ?> ریشه‌یابی و علت‌یابی سوالات نادرست و نزده</h3>
+    <p class="muted mb-3" style="font-size: 13px;">برای تحلیل رفتاری دقیق‌تر و هوشمند، لطفا علت خطای خود در هر یک از سوالات زیر را مشخص کنید:</p>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <?php foreach($issues as $it): $qNum = (int)$it['question_number']; ?>
+        <div style="background: rgba(240, 244, 241, 0.5); border: 1px solid #dfe7df; border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+          <div class="flex gap-2" style="align-items: center;">
+            <span class="badge badge-gold" style="font-size: 12px; font-weight: bold; background: #2e4438; color: #fff;">سوال <?= fa_num($qNum) ?></span>
+            <span class="badge badge-sage" style="font-size: 11px;"><?= e($it['subject']) ?></span>
+            <span class="badge" style="font-size: 11px; background: <?= $it['type']==='blank'?'#f0ece1':'#fceeed' ?>; color: <?= $it['type']==='blank'?'#856404':'#721c24' ?>;">
+              <?= $it['type']==='blank'?'نزده':'غلط' ?>
+            </span>
+          </div>
+          
+          <div class="field" style="margin: 0; min-width: 280px; flex-grow: 1; max-width: 450px;">
+            <select class="select" name="issues[<?= $qNum ?>][reason]" style="width: 100%;">
+              <option value="unknown">علت را انتخاب کنید...</option>
+              <?php if($it['type'] === 'blank'): ?>
+                <option value="not_studied" <?= ($it['reason']??'')==='not_studied'?'selected':'' ?>>عدم مطالعه یا حذف مبحث از قبل</option>
+                <option value="not_mastered" <?= ($it['reason']??'')==='not_mastered'?'selected':'' ?>>عدم تسلط کافی (با وجود مطالعه مبحث)</option>
+                <option value="no_time" <?= ($it['reason']??'')==='no_time'?'selected':'' ?>>کمبود زمان (اصلاً به سوال نرسیدم)</option>
+                <option value="too_hard" <?= ($it['reason']??'')==='too_hard'?'selected':'' ?>>دشواری بیش از حد سوال (ارزش ریسک نداشت)</option>
+                <option value="doubt_many" <?= ($it['reason']??'')==='doubt_many'?'selected':'' ?>>شک بین سه یا چهار گزینه</option>
+                <option value="strategy" <?= ($it['reason']??'')==='strategy'?'selected':'' ?>>استراتژی اشتباه در اولویت‌بندی سوال</option>
+              <?php else: ?>
+                <option value="concept" <?= ($it['reason']??'')==='concept'?'selected':'' ?>>ضعف علمی و مفهومی (عدم درک مطلب)</option>
+                <option value="careless_calc" <?= ($it['reason']??'')==='careless_calc'?'selected':'' ?>>بی‌دقتی در محاسبات عددی</option>
+                <option value="careless_read" <?= ($it['reason']??'')==='careless_read'?'selected':'' ?>>بی‌دقتی در خواندن صورت سوال یا گزینه‌ها</option>
+                <option value="forgot" <?= ($it['reason']??'')==='forgot'?'selected':'' ?>>فراموشی فرمول، فرضیه یا نکته کلیدی</option>
+                <option value="doubt" <?= ($it['reason']??'')==='doubt'?'selected':'' ?>>شک بین دو گزینه (انتخاب اشتباه)</option>
+                <option value="trap" <?= ($it['reason']??'')==='trap'?'selected':'' ?>>افتادن در تله آموزشی/علمی طراح</option>
+                <option value="time_rush" <?= ($it['reason']??'')==='time_rush'?'selected':'' ?>>کمبود زمان و حل شتاب‌زده</option>
+                <option value="bubble_err" <?= ($it['reason']??'')==='bubble_err'?'selected':'' ?>>اشتباه در وارد کردن گزینه در پاسخبرگ</option>
+              <?php endif; ?>
+              <option value="unknown" <?= ($it['reason']??'')==='unknown'?'selected':'' ?>>سایر موارد / نامشخص</option>
+            </select>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <button class="btn btn-gold btn-lg" style="font-weight:900"><?= icon('check',18) ?> ثبت و ساخت تحلیل آزمون داخلی</button>
 </form>
 
