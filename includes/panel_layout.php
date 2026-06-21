@@ -34,6 +34,7 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
             ['messages','پیام‌ها و چت‌باکس','message','admin/messages.php'],
         ]),
         'other' => [
+            ['guide','راهنمای پنل','book','admin/guide.php'],
             ['achievements','مدیریت دستاوردها','trophy','admin/achievements.php'],
             ['settings','تنظیمات سامانه','settings','admin/settings.php'],
         ],
@@ -50,6 +51,7 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
             ['reviews','برنامه مرور','repeat','student/reviews.php'],
         ],
         'other' => [
+            ['guide','راهنمای پنل','book','student/guide.php'],
             ['achievements','دستاوردها','trophy','student/achievements.php'],
             ['profile','پروفایل من','user','student/profile.php'],
         ],
@@ -103,9 +105,13 @@ function panel_start(string $title, string $subtitle, string $role, string $acti
       </div>
       <div class="tb-actions">
         <?php if ($role === 'admin' || $role === 'advisor'): ?>
-          <button class="btn btn-gold btn-sm flex items-center gap-1.5" id="advisorTourBtn" style="font-weight: 900; box-shadow: 0 4px 12px rgba(178,148,95,0.25); border-radius: 12px; height: 38px;">
-            🎓 <span>آموزش پنل</span>
-          </button>
+      <a href="<?= url('admin/guide.php') ?>" class="btn btn-ghost btn-sm flex items-center gap-1.5" style="font-weight: 900; border: 1px solid var(--gold); border-radius: 12px; height: 38px; color: var(--gold-light);">
+        📖 <span>راهنما</span>
+      </a>
+        <?php else: ?>
+      <a href="<?= url('student/guide.php') ?>" class="btn btn-ghost btn-sm flex items-center gap-1.5" style="font-weight: 900; border: 1px solid var(--sage); border-radius: 12px; height: 38px; color: var(--sage-light);">
+        📖 <span>راهنما</span>
+      </a>
         <?php endif; ?>
         <a href="<?= url($role==='admin'?'admin/messages.php':'student/messages.php') ?>" class="tb-btn" data-tip="پیام‌ها"><?= icon('message',20) ?><?php if($msgCount>0):?><span class="dot"></span><?php endif;?></a>
         <button class="tb-btn" id="notifBtn" data-tip="اعلان‌ها"><?= icon('bell',20) ?><?php if($notifCount>0):?><span class="dot"></span><?php endif;?></button>
@@ -153,8 +159,5 @@ function panel_end(array $extraJs = []): void
 </script>
 <?php
   $finalJs = ['panel.js'];
-  if ($ctx && $ctx['role'] === 'admin') {
-      $finalJs[] = 'advisor_tour.js';
-  }
   page_foot(array_merge($finalJs, $extraJs));
 }

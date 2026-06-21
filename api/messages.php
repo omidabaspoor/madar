@@ -215,7 +215,15 @@ switch ($action) {
 
 case 'contacts': {
     if (in_array($u['role'], ['advisor','admin'], true)) {
-        $rows = db()->query('SELECT id, full_name, field, status FROM users WHERE role="student" AND status="active" ORDER BY full_name')->fetchAll();
+        $accessMode = $u['access_mode'] ?? 'all';
+        $role = $u['role'];
+        $where = 'role="student" AND status="active"';
+        if ($accessMode === 'restricted') {
+            $where .= ' AND id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id=' . (int)$me . ')';
+        } elseif ($role !== 'admin') {
+            $where .= ' AND (advisor_id=' . (int)$me . ' OR id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id=' . (int)$me . '))';
+        }
+        $rows = db()->query('SELECT id, full_name, field, status FROM users WHERE ' . $where . ' ORDER BY full_name')->fetchAll();
     } else {
         $rows = db()->query('SELECT id, full_name, field, status FROM users WHERE role IN ("advisor","admin") ORDER BY id')->fetchAll();
     }

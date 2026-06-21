@@ -176,11 +176,59 @@ function get_user(int $id): ?array
 function advisor_stats(int $advisorId): array
 {
     $pdo = db();
-    $total = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='student'")->fetchColumn();
-    $active = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='student' AND status='active'")->fetchColumn();
-    $pending = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='student' AND status='pending'")->fetchColumn();
-    $tasksDone = (int)$pdo->query("SELECT COUNT(*) FROM tasks WHERE is_done=1")->fetchColumn();
-    $tasksTotal = (int)$pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
+    $adv = get_user($advisorId);
+    $accessMode = $adv['access_mode'] ?? 'all';
+    $role = $adv['role'] ?? 'advisor';
+
+    // ساختار where برای فیلتر دانش‌آموزان قابل دسترسی
+    $where = "role='student'";
+    $params = [];
+
+    if ($accessMode === 'restricted') {
+        $where .= ' AND id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id = ?)';
+        $params[] = $advisorId;
+    } else {
+        if ($role !== 'admin') {
+            $where .= ' AND (advisor_id = ? OR id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id = ?))';
+            $params[] = $advisorId;
+            $params[] = $advisorId;
+        }
+    }
+
+    // آمار با فیلتر دسترسی
+    $totalSql = "SELECT COUNT(*) FROM users WHERE $where";
+    $st = $pdo->prepare($totalSql);
+    $st->execute($params);
+    $total = (int)$st->fetchColumn();
+
+    $activeSql = "SELECT COUNT(*) FROM users WHERE $where AND status='active'";
+    $st = $pdo->prepare($activeSql);
+    $st->execute($params);
+    $active = (int)$st->fetchColumn();
+
+    $pendingSql = "SELECT COUNT(*) FROM users WHERE $where AND status='pending'";
+    $st = $pdo->prepare($pendingSql);
+    $st->execute($params);
+    $pending = (int)$st->fetchColumn();
+
+    // تسک‌ها فقط برای دانش‌آموزان قابل دسترسی
+    $studentIds = [];
+    $stIds = $pdo->prepare("SELECT id FROM users WHERE $where");
+    $stIds->execute($params);
+    $studentIds = $stIds->fetchAll(PDO::FETCH_COLUMN);
+
+    if (!empty($studentIds)) {
+        $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
+        $st = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE student_id IN ($placeholders) AND is_done=1");
+        $st->execute($studentIds);
+        $tasksDone = (int)$st->fetchColumn();
+        $st = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE student_id IN ($placeholders)");
+        $st->execute($studentIds);
+        $tasksTotal = (int)$st->fetchColumn();
+    } else {
+        $tasksDone = 0;
+        $tasksTotal = 0;
+    }
     $rate = $tasksTotal ? round($tasksDone / $tasksTotal * 100) : 0;
     return compact('total','active','pending','tasksDone','tasksTotal','rate');
 }

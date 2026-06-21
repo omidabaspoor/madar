@@ -268,9 +268,19 @@ case 'set_status': {
         // اعلان به دانش‌آموزان فعال
         $tf = !empty($e['target_fields_json']) ? (json_decode((string)$e['target_fields_json'], true) ?: []) : [];
         $tg = !empty($e['target_grades_json']) ? (json_decode((string)$e['target_grades_json'], true) ?: []) : [];
+        $accessMode = $u['access_mode'] ?? 'all';
         $where = "role='student' AND status='active'";
         $params = [];
-        if ($u['role'] !== 'admin') { $where .= ' AND advisor_id=?'; $params[] = $me; }
+        if ($u['role'] !== 'admin') {
+            if ($accessMode === 'restricted') {
+                $where .= ' AND id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id=?)';
+                $params[] = $me;
+            } else {
+                $where .= ' AND (advisor_id=? OR id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id=?))';
+                $params[] = $me;
+                $params[] = $me;
+            }
+        }
         if ($tf) { $where .= ' AND field IN (' . implode(',', array_fill(0, count($tf), '?')) . ')'; array_push($params, ...$tf); }
         if ($tg) { $where .= ' AND grade IN (' . implode(',', array_fill(0, count($tg), '?')) . ')'; array_push($params, ...$tg); }
         $stStud = db()->prepare("SELECT id FROM users WHERE $where");

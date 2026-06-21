@@ -67,10 +67,20 @@ if ($u['role'] === 'admin') {
         WHERE s.role="student" AND s.status="active" ORDER BY s.full_name');
     $ctrl->execute([$examId]);
 } else {
-    $ctrl = db()->prepare('SELECT s.id,s.full_name,s.field,s.status,a.id attempt_id,a.status attempt_status,a.started_at,a.submitted_at,a.total_score
-        FROM users s LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=?
-        WHERE s.role="student" AND s.status="active" AND s.advisor_id=? ORDER BY s.full_name');
-    $ctrl->execute([$examId, (int)$u['id']]);
+    $accessMode = $u['access_mode'] ?? 'all';
+    if ($accessMode === 'restricted') {
+        $ctrl = db()->prepare('SELECT s.id,s.full_name,s.field,s.status,a.id attempt_id,a.status attempt_status,a.started_at,a.submitted_at,a.total_score
+            FROM users s LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=?
+            WHERE s.role="student" AND s.status="active" AND s.id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id=?)
+            ORDER BY s.full_name');
+        $ctrl->execute([$examId, (int)$u['id']]);
+    } else {
+        $ctrl = db()->prepare('SELECT s.id,s.full_name,s.field,s.status,a.id attempt_id,a.status attempt_status,a.started_at,a.submitted_at,a.total_score
+            FROM users s LEFT JOIN exam_attempts a ON a.student_id=s.id AND a.exam_id=?
+            WHERE s.role="student" AND s.status="active" AND (s.advisor_id=? OR s.id IN (SELECT student_id FROM advisor_student_access WHERE advisor_id=?))
+            ORDER BY s.full_name');
+        $ctrl->execute([$examId, (int)$u['id'], (int)$u['id']]);
+    }
 }
 $controlRows = $ctrl->fetchAll();
 
